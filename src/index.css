@@ -1,40 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Textile MES — Clean enterprise light (SAP/Odoo-style)
+   All colors MUST be HSL. */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 210 25% 98%;
+    --foreground: 215 28% 17%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 28% 17%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 215 28% 17%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Deep enterprise blue */
+    --primary: 215 70% 32%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 215 70% 96%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 215 25% 94%;
+    --secondary-foreground: 215 28% 17%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 215 20% 95%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 215 70% 96%;
+    --accent-foreground: 215 70% 32%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --success: 142 65% 38%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 142 60% 94%;
+
+    --warning: 35 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 35 90% 95%;
+
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 199 90% 95%;
+
+    --border: 215 20% 89%;
+    --input: 215 20% 89%;
+    --ring: 215 70% 32%;
+
+    --chart-1: 215 70% 32%;
+    --chart-2: 199 89% 48%;
+    --chart-3: 142 65% 38%;
+    --chart-4: 35 92% 50%;
+    --chart-5: 280 60% 50%;
+    --chart-6: 0 72% 51%;
+
+    --shadow-sm: 0 1px 2px 0 hsl(215 28% 17% / 0.04);
+    --shadow-md: 0 2px 8px -2px hsl(215 28% 17% / 0.08);
+    --shadow-lg: 0 8px 24px -8px hsl(215 28% 17% / 0.12);
 
     --radius: 0.5rem;
 
@@ -101,5 +127,22 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .font-mono-num {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .kpi-card {
+    @apply bg-card border border-border rounded-lg p-5 transition-all hover:shadow-md;
+  }
+  .data-table-row {
+    @apply border-b border-border hover:bg-muted/40 transition-colors;
   }
 }

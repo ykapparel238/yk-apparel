@@ -1,0 +1,130 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Factory } from "lucide-react";
+
+export default function Login() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("rohit@knitcraft.in");
+  const [pw, setPw] = useState("demo1234");
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    navigate("/");
+  };
+
+  return (
+    <div className="min-h-screen grid lg:grid-cols-2 bg-background">
+      {/* Brand panel */}
+      <div className="hidden lg:flex flex-col justify-between p-12 bg-primary text-primary-foreground relative overflow-hidden">
+        <div className="relative z-10 flex items-center gap-2">
+          <div className="h-9 w-9 rounded bg-primary-foreground text-primary font-bold grid place-items-center">
+            KC
+          </div>
+          <div>
+            <div className="font-semibold">KnitCraft MES</div>
+            <div className="text-[11px] opacity-70 uppercase tracking-wider">Textile Production Suite</div>
+          </div>
+        </div>
+
+        <div className="relative z-10 space-y-6">
+          <h2 className="text-3xl font-bold leading-tight max-w-md">
+            Run a 200,000 unit/month sweater factory with confidence.
+          </h2>
+          <p className="text-sm opacity-80 max-w-md leading-relaxed">
+            From yarn inward to dispatch. Plan capacity across 7 lines, track 6+ vendor partners,
+            and maintain quality across every brand you serve.
+          </p>
+          <div className="grid grid-cols-3 gap-4 max-w-md pt-4">
+            {[
+              { v: "200K", l: "Units/mo capacity" },
+              { v: "7+", l: "Active brands" },
+              { v: "92%", l: "OTIF delivery" },
+            ].map((s) => (
+              <div key={s.l}>
+                <div className="text-2xl font-bold font-mono-num">{s.v}</div>
+                <div className="text-[11px] opacity-70 mt-0.5">{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="relative z-10 text-[11px] opacity-60">
+          © 2024 KnitCraft. Built for Indian textile manufacturers.
+        </div>
+
+        {/* Decorative grid */}
+        <div
+          className="absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage:
+              "linear-gradient(hsl(var(--primary-foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary-foreground)) 1px, transparent 1px)",
+            backgroundSize: "32px 32px",
+          }}
+        />
+      </div>
+
+      {/* Form */}
+      <div className="flex items-center justify-center p-6 lg:p-12">
+        <div className="w-full max-w-sm">
+          <div className="lg:hidden flex items-center gap-2 mb-8">
+            <div className="h-9 w-9 rounded bg-primary text-primary-foreground font-bold grid place-items-center">
+              <Factory className="h-4 w-4" />
+            </div>
+            <div className="font-semibold">KnitCraft MES</div>
+          </div>
+
+          <h1 className="text-2xl font-bold">Sign in to your factory</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            Use your work email to access dashboards.
+          </p>
+
+          <form onSubmit={submit} className="mt-8 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-xs">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="pw" className="text-xs">Password</Label>
+                <a className="text-[11px] text-primary hover:underline" href="#">Forgot?</a>
+              </div>
+              <Input
+                id="pw"
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                className="h-10"
+              />
+            </div>
+
+            <Button type="submit" className="w-full h-10 mt-2">
+              Sign in
+            </Button>
+
+            <div className="text-[11px] text-center text-muted-foreground pt-2">
+              Demo: any credentials proceed to the dashboard
+            </div>
+          </form>
+
+          <div className="mt-10 pt-6 border-t border-border">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+              Trusted by
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>Marks &amp; Spencer</span>·<span>H&amp;M</span>·<span>Uniqlo</span>·<span>Zara</span>·<span>GAP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

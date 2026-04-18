@@ -71,7 +71,11 @@ export default function Planning() {
               </div>
               <div className="p-2 space-y-2 flex-1">
                 {cards.map((c) => (
-                  <div key={c.id} className="bg-card border border-border rounded-md p-3 hover:shadow-sm transition-shadow cursor-pointer">
+                  <div
+                    key={c.id}
+                    onClick={() => navigate(`/orders/${c.id}`)}
+                    className="bg-card border border-border rounded-md p-3 hover:shadow-sm hover:border-primary/30 transition-all cursor-pointer"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[11px] font-mono-num font-semibold text-primary">{c.id}</span>
                       <StatusBadge status={c.priority} />

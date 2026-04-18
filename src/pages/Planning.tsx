@@ -3,11 +3,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { lines, orders } from "@/lib/mockData";
 import { Calendar, Plus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 const columns = ["Created", "Planned", "In Production", "QA", "Dispatched"] as const;
 
 export default function Planning() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
+  const navigate = useNavigate();
 
   return (
     <div>
@@ -17,8 +19,10 @@ export default function Planning() {
         description="Capacity allocation across 7 lines • 200,000 units/month installed"
         actions={
           <>
-            <Button variant="outline" size="sm" className="h-9">
-              <Calendar className="h-3.5 w-3.5 mr-1.5" /> Production Calendar
+            <Button asChild variant="outline" size="sm" className="h-9">
+              <Link to="/planning/calendar">
+                <Calendar className="h-3.5 w-3.5 mr-1.5" /> Production Calendar
+              </Link>
             </Button>
             <Button size="sm" className="h-9">
               <Plus className="h-3.5 w-3.5 mr-1.5" /> Create Plan

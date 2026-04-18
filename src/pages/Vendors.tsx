@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { vendors } from "@/lib/mockData";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function Vendors() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
@@ -20,7 +21,11 @@ export default function Vendors() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {vendors.map((v) => (
-          <div key={v.id} className="bg-card border border-border rounded-lg p-5 hover:shadow-md transition-shadow">
+          <Link
+            key={v.id}
+            to={`/vendors/${v.id}`}
+            className="bg-card border border-border rounded-lg p-5 hover:shadow-md hover:border-primary/30 transition-all"
+          >
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono-num">{v.id}</div>
@@ -58,7 +63,7 @@ export default function Vendors() {
                 <div className="h-full bg-success" style={{ width: `${v.quality}%` }} />
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

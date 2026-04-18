@@ -12,6 +12,11 @@ const map: Record<string, string> = {
   High: "bg-warning-soft text-warning border-warning/30",
   Medium: "bg-info-soft text-info border-info/20",
   Low: "bg-muted text-muted-foreground border-border",
+  Open: "bg-info-soft text-info border-info/20",
+  Partial: "bg-warning-soft text-warning border-warning/30",
+  Closed: "bg-success-soft text-success border-success/30",
+  Active: "bg-success-soft text-success border-success/30",
+  Inactive: "bg-muted text-muted-foreground border-border",
 };
 
 export function StatusBadge({ status }: { status: OrderStatus | string }) {

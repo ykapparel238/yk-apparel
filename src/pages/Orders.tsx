@@ -2,12 +2,33 @@ import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { orders } from "@/lib/mockData";
+import { Label } from "@/components/ui/label";
+import { brands, orders, styles } from "@/lib/mockData";
 import { Download, Plus, Search } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 export default function Orders() {
   const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const filtered = orders.filter(
     (o) =>
       o.id.toLowerCase().includes(q.toLowerCase()) ||
@@ -27,9 +48,93 @@ export default function Orders() {
             <Button variant="outline" size="sm" className="h-9">
               <Download className="h-3.5 w-3.5 mr-1.5" /> Export
             </Button>
-            <Button size="sm" className="h-9">
-              <Plus className="h-3.5 w-3.5 mr-1.5" /> New PO
-            </Button>
+            <Sheet open={open} onOpenChange={setOpen}>
+              <SheetTrigger asChild>
+                <Button size="sm" className="h-9">
+                  <Plus className="h-3.5 w-3.5 mr-1.5" /> New PO
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>Create Purchase Order</SheetTitle>
+                  <SheetDescription>
+                    Enter PO details — order will enter the planning queue.
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="space-y-4 mt-6">
+                  <Field label="Brand / Customer">
+                    <Select>
+                      <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
+                      <SelectContent>
+                        {brands.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Style">
+                    <Select>
+                      <SelectTrigger><SelectValue placeholder="Select style" /></SelectTrigger>
+                      <SelectContent>
+                        {styles.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="PO Number">
+                      <Input placeholder="PO-24-1021" />
+                    </Field>
+                    <Field label="Season">
+                      <Select>
+                        <SelectTrigger><SelectValue placeholder="Season" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="AW24">AW24</SelectItem>
+                          <SelectItem value="SS25">SS25</SelectItem>
+                          <SelectItem value="AW25">AW25</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Quantity">
+                      <Input type="number" placeholder="15000" />
+                    </Field>
+                    <Field label="Delivery Date">
+                      <Input type="date" />
+                    </Field>
+                  </div>
+                  <Field label="Priority">
+                    <Select defaultValue="Medium">
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Critical">Critical</SelectItem>
+                        <SelectItem value="High">High</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="Low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Notes">
+                    <Input placeholder="Special instructions, ship-mode, etc." />
+                  </Field>
+                </div>
+                <SheetFooter className="mt-6">
+                  <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                  <Button
+                    onClick={() => {
+                      toast.success("Purchase Order created", {
+                        description: "New PO has been queued for planning.",
+                      });
+                      setOpen(false);
+                    }}
+                  >
+                    Create PO
+                  </Button>
+                </SheetFooter>
+              </SheetContent>
+            </Sheet>
           </>
         }
       />
@@ -67,7 +172,11 @@ export default function Orders() {
             </thead>
             <tbody>
               {filtered.map((o) => (
-                <tr key={o.id} className="data-table-row">
+                <tr
+                  key={o.id}
+                  className="data-table-row cursor-pointer"
+                  onClick={() => navigate(`/orders/${o.id}`)}
+                >
                   <td className="px-4 py-3 font-mono-num text-xs font-semibold text-primary">{o.id}</td>
                   <td className="px-4 py-3">{o.brand}</td>
                   <td className="px-4 py-3">
@@ -98,6 +207,15 @@ export default function Orders() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium">{label}</Label>
+      {children}
     </div>
   );
 }

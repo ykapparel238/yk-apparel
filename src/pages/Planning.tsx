@@ -3,11 +3,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { lines, orders } from "@/lib/mockData";
 import { Calendar, Plus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 const columns = ["Created", "Planned", "In Production", "QA", "Dispatched"] as const;
 
 export default function Planning() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
+  const navigate = useNavigate();
 
   return (
     <div>
@@ -17,8 +19,10 @@ export default function Planning() {
         description="Capacity allocation across 7 lines • 200,000 units/month installed"
         actions={
           <>
-            <Button variant="outline" size="sm" className="h-9">
-              <Calendar className="h-3.5 w-3.5 mr-1.5" /> Production Calendar
+            <Button asChild variant="outline" size="sm" className="h-9">
+              <Link to="/planning/calendar">
+                <Calendar className="h-3.5 w-3.5 mr-1.5" /> Production Calendar
+              </Link>
             </Button>
             <Button size="sm" className="h-9">
               <Plus className="h-3.5 w-3.5 mr-1.5" /> Create Plan
@@ -67,7 +71,11 @@ export default function Planning() {
               </div>
               <div className="p-2 space-y-2 flex-1">
                 {cards.map((c) => (
-                  <div key={c.id} className="bg-card border border-border rounded-md p-3 hover:shadow-sm transition-shadow cursor-pointer">
+                  <div
+                    key={c.id}
+                    onClick={() => navigate(`/orders/${c.id}`)}
+                    className="bg-card border border-border rounded-md p-3 hover:shadow-sm hover:border-primary/30 transition-all cursor-pointer"
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[11px] font-mono-num font-semibold text-primary">{c.id}</span>
                       <StatusBadge status={c.priority} />

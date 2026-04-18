@@ -7,9 +7,12 @@ import { RoleProvider } from "@/context/RoleContext";
 import AppLayout from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import Orders from "./pages/Orders";
+import OrderDetail from "./pages/OrderDetail";
 import Planning from "./pages/Planning";
+import CalendarPage from "./pages/Calendar";
 import Production from "./pages/Production";
 import Vendors from "./pages/Vendors";
+import VendorDetail from "./pages/VendorDetail";
 import Inventory from "./pages/Inventory";
 import QA from "./pages/QA";
 import Dispatch from "./pages/Dispatch";
@@ -36,9 +39,12 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<Shell><Dashboard /></Shell>} />
             <Route path="/orders" element={<Shell><Orders /></Shell>} />
+            <Route path="/orders/:id" element={<Shell><OrderDetail /></Shell>} />
             <Route path="/planning" element={<Shell><Planning /></Shell>} />
+            <Route path="/planning/calendar" element={<Shell><CalendarPage /></Shell>} />
             <Route path="/production" element={<Shell><Production /></Shell>} />
             <Route path="/vendors" element={<Shell><Vendors /></Shell>} />
+            <Route path="/vendors/:id" element={<Shell><VendorDetail /></Shell>} />
             <Route path="/inventory" element={<Shell><Inventory /></Shell>} />
             <Route path="/qa" element={<Shell><QA /></Shell>} />
             <Route path="/dispatch" element={<Shell><Dispatch /></Shell>} />

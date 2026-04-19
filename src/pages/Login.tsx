@@ -1,19 +1,55 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useNavigate } from "react-router-dom";
+import { useRole } from "@/context/RoleContext";
+import { loginSchema, type LoginInput } from "@/lib/auth";
+import { Factory, TriangleAlert } from "lucide-react";
 import { useState } from "react";
-import { Factory } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("rohit@knitcraft.in");
-  const [pw, setPw] = useState("demo1234");
+  const location = useLocation();
+  const { login } = useRole();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const redirectTo = location.state?.from && location.state.from !== "/login"
+    ? location.state.from
+    : "/";
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    navigate("/");
-  };
+  const form = useForm<LoginInput>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "rohit@knitcraft.in",
+      password: "demo1234",
+    },
+  });
+
+  const submit = form.handleSubmit(async (values) => {
+    setSubmitError(null);
+
+    try {
+      await login(values);
+      toast.success("Signed in", {
+        description: "Session restored for this browser.",
+      });
+      navigate(redirectTo, { replace: true });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Unable to sign in");
+    }
+  });
+
+  const isSubmitting = form.formState.isSubmitting;
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
@@ -81,39 +117,57 @@ export default function Login() {
             Use your work email to access dashboards.
           </p>
 
-          <form onSubmit={submit} className="mt-8 space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-10"
+          <Form {...form}>
+            <form onSubmit={submit} className="mt-8 space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs">Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" className="h-10" {...field} />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="pw" className="text-xs">Password</Label>
-                <a className="text-[11px] text-primary hover:underline" href="#">Forgot?</a>
+
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <FormLabel className="text-xs">Password</FormLabel>
+                      <a className="text-[11px] text-primary hover:underline" href="#">
+                        Forgot?
+                      </a>
+                    </div>
+                    <FormControl>
+                      <Input type="password" className="h-10" {...field} />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )}
+              />
+
+              {submitError && (
+                <Alert variant="destructive" className="py-3">
+                  <TriangleAlert className="h-4 w-4" />
+                  <AlertDescription>{submitError}</AlertDescription>
+                </Alert>
+              )}
+
+              <Button type="submit" className="w-full h-10 mt-2" disabled={isSubmitting}>
+                {isSubmitting ? "Signing in..." : "Sign in"}
+              </Button>
+
+              <div className="text-[11px] text-center text-muted-foreground pt-2">
+                Demo users: rohit@knitcraft.in / demo1234, meena@knitcraft.in / planner123
               </div>
-              <Input
-                id="pw"
-                type="password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                className="h-10"
-              />
-            </div>
-
-            <Button type="submit" className="w-full h-10 mt-2">
-              Sign in
-            </Button>
-
-            <div className="text-[11px] text-center text-muted-foreground pt-2">
-              Demo: any credentials proceed to the dashboard
-            </div>
-          </form>
+            </form>
+          </Form>
 
           <div className="mt-10 pt-6 border-t border-border">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">

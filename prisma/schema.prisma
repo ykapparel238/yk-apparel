@@ -1,0 +1,508 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  FACTORY_MANAGER
+  PRODUCTION_PLANNER
+  MERCHANDISER
+  QA_MANAGER
+  STORE_MANAGER
+  LINE_SUPERVISOR
+  VENDOR_MANAGER
+  DISPATCH_MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrderStatus {
+  CREATED
+  PLANNED
+  IN_PRODUCTION
+  QA
+  DISPATCHED
+  DELAYED
+}
+
+enum OrderPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum VendorStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ChallanStatus {
+  OPEN
+  PARTIAL
+  CLOSED
+}
+
+enum MaterialType {
+  YARN
+  TRIM
+  LABEL
+  PACKING
+  OTHER
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ProductionStageCode {
+  YARN_INWARD
+  KNITTING
+  LINKING
+  WASHING
+  DRYING
+  FINISHING
+  IRONING
+  QUALITY_CHECK
+  PACKING
+  DISPATCH
+}
+
+enum DispatchStatus {
+  READY
+  SCHEDULED
+  DISPATCHED
+  CANCELLED
+}
+
+enum AlertSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}
+
+model Department {
+  id         String  @id @default(cuid())
+  code       String  @unique
+  name       String
+  headName   String?
+  staffCount Int?
+  lineCount  Int?
+  users      User[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Shift {
+  id             String  @id @default(cuid())
+  code           String  @unique
+  name           String
+  startTime      String
+  endTime        String
+  supervisorName String?
+  headcount      Int?
+  users          User[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model User {
+  id           String     @id @default(cuid())
+  employeeCode String     @unique
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  departmentId String?
+  shiftId      String?
+  lastActiveAt DateTime?
+
+  department   Department? @relation(fields: [departmentId], references: [id])
+  shift        Shift?      @relation(fields: [shiftId], references: [id])
+  auditLogs    AuditLog[]
+  sessions     Session[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Brand {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  name         String          @unique
+  countryCode  String
+  styles       Style[]
+  orders       PurchaseOrder[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Supplier {
+  id                String     @id @default(cuid())
+  code              String     @unique
+  name              String     @unique
+  defaultMaterial   String?
+  leadTimeDays      Int?
+  materials         Material[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Material {
+  id            String       @id @default(cuid())
+  sku           String       @unique
+  name          String
+  type          MaterialType
+  uom           String
+  stockQty      Decimal      @db.Decimal(12, 2)
+  allocatedQty  Decimal      @default(0) @db.Decimal(12, 2)
+  reorderLevel  Decimal      @db.Decimal(12, 2)
+  supplierId    String?
+  supplier      Supplier?    @relation(fields: [supplierId], references: [id])
+  bomItems      BillOfMaterialItem[]
+  alerts        Alert[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Vendor {
+  id              String               @id @default(cuid())
+  code            String               @unique
+  name            String               @unique
+  process         String
+  status          VendorStatus         @default(ACTIVE)
+  capacityPerDay  Int
+  challans        VendorChallan[]
+  qaInspections   QaInspection[]
+  weeklyMetrics   VendorWeeklyMetric[]
+  alerts          Alert[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ProductionLine {
+  id             String            @id @default(cuid())
+  code           String            @unique
+  name           String            @unique
+  process        String
+  gauge          String
+  machineCount   Int
+  isActive       Boolean           @default(true)
+  plans          ProductionPlan[]
+  dailyMetrics   LineDailyMetric[]
+  qaInspections  QaInspection[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Style {
+  id               String                @id @default(cuid())
+  code             String                @unique
+  brandId          String
+  name             String
+  gauge            String
+  yarnDescription  String
+  isActive         Boolean               @default(true)
+
+  brand            Brand                 @relation(fields: [brandId], references: [id])
+  sizes            StyleSize[]
+  colors           StyleColor[]
+  bomItems         BillOfMaterialItem[]
+  orders           PurchaseOrder[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model StyleSize {
+  id         String  @id @default(cuid())
+  styleId    String
+  label      String
+  sortOrder  Int
+
+  style      Style   @relation(fields: [styleId], references: [id], onDelete: Cascade)
+
+  @@unique([styleId, label])
+}
+
+model StyleColor {
+  id         String  @id @default(cuid())
+  styleId    String
+  name       String
+  hexCode    String?
+  sortOrder  Int
+
+  style      Style   @relation(fields: [styleId], references: [id], onDelete: Cascade)
+
+  @@unique([styleId, name])
+}
+
+model BillOfMaterialItem {
+  id               String   @id @default(cuid())
+  styleId          String
+  materialId       String
+  quantityPerPiece Decimal  @db.Decimal(10, 2)
+  uom              String
+
+  style            Style    @relation(fields: [styleId], references: [id], onDelete: Cascade)
+  material         Material @relation(fields: [materialId], references: [id])
+
+  @@unique([styleId, materialId])
+}
+
+model PurchaseOrder {
+  id               String                    @id @default(cuid())
+  poNumber         String                    @unique
+  brandId          String
+  styleId          String
+  seasonCode       String
+  quantity         Int
+  deliveredQty     Int                       @default(0)
+  dueDate          DateTime
+  orderDate        DateTime                  @default(now())
+  status           OrderStatus               @default(CREATED)
+  priority         OrderPriority             @default(MEDIUM)
+  notes            String?
+
+  brand            Brand                     @relation(fields: [brandId], references: [id])
+  style            Style                     @relation(fields: [styleId], references: [id])
+  sizeAllocations  PurchaseOrderSizeAllocation[]
+  colorAllocations PurchaseOrderColorAllocation[]
+  productionPlans  ProductionPlan[]
+  challans         VendorChallan[]
+  qaInspections    QaInspection[]
+  shipments        DispatchShipment[]
+  alerts           Alert[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model PurchaseOrderSizeAllocation {
+  id          String        @id @default(cuid())
+  orderId     String
+  sizeLabel   String
+  percent     Int?
+  quantity    Int?
+
+  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, sizeLabel])
+}
+
+model PurchaseOrderColorAllocation {
+  id          String        @id @default(cuid())
+  orderId     String
+  colorName   String
+  hexCode     String?
+  percent     Int?
+  quantity    Int?
+
+  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, colorName])
+}
+
+model ProductionPlan {
+  id            String      @id @default(cuid())
+  orderId       String
+  lineId        String
+  startDate     DateTime
+  endDate       DateTime
+  plannedQty    Int
+  dailyTarget   Int?
+  status        PlanStatus  @default(ACTIVE)
+
+  order         PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  line          ProductionLine @relation(fields: [lineId], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model StageDailyMetric {
+  id           String              @id @default(cuid())
+  metricDate   DateTime
+  stage        ProductionStageCode
+  plannedQty   Int
+  actualQty    Int
+  wipQty       Int
+  rejectedQty  Int
+  pendingQty   Int
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([metricDate, stage])
+}
+
+model LineDailyMetric {
+  id             String         @id @default(cuid())
+  metricDate     DateTime
+  lineId         String
+  efficiencyPct  Int
+  outputQty      Int
+  isRunning      Boolean        @default(true)
+
+  line           ProductionLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([metricDate, lineId])
+}
+
+model VendorChallan {
+  id            String         @id @default(cuid())
+  challanNumber String         @unique
+  vendorId      String
+  orderId       String
+  process       String
+  challanDate   DateTime
+  outwardQty    Int
+  inwardQty     Int            @default(0)
+  rejectedQty   Int            @default(0)
+  status        ChallanStatus  @default(OPEN)
+
+  vendor        Vendor         @relation(fields: [vendorId], references: [id])
+  order         PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model QaDefectType {
+  id          String              @id @default(cuid())
+  code        String              @unique
+  name        String              @unique
+  defects     QaInspectionDefect[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model QaInspection {
+  id            String               @id @default(cuid())
+  inspectedAt   DateTime
+  orderId       String?
+  vendorId      String?
+  lineId        String?
+  stage         ProductionStageCode
+  checkedQty    Int
+  approvedQty   Int
+  rejectedQty   Int
+  reworkQty     Int                 @default(0)
+
+  order         PurchaseOrder?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  vendor        Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  line          ProductionLine?     @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  defects       QaInspectionDefect[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model QaInspectionDefect {
+  id            String        @id @default(cuid())
+  inspectionId  String
+  defectTypeId  String
+  count         Int
+
+  inspection    QaInspection  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  defectType    QaDefectType  @relation(fields: [defectTypeId], references: [id])
+
+  @@unique([inspectionId, defectTypeId])
+}
+
+model VendorWeeklyMetric {
+  id               String    @id @default(cuid())
+  vendorId         String
+  weekStartDate    DateTime
+  onTimePct        Int
+  throughputQty    Int
+  qualityPct       Int
+
+  vendor           Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([vendorId, weekStartDate])
+}
+
+model DispatchShipment {
+  id              String         @id @default(cuid())
+  shipmentNumber  String         @unique
+  orderId         String
+  dispatchDate    DateTime
+  quantity        Int
+  invoiceNumber   String?
+  status          DispatchStatus @default(SCHEDULED)
+
+  order           PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  occurredAt   DateTime @default(now())
+  actorUserId  String?
+  module       String
+  action       String
+  targetType   String
+  targetId     String?
+  targetLabel  String
+
+  actor        User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+}
+
+model Alert {
+  id          String        @id @default(cuid())
+  severity    AlertSeverity
+  title       String
+  module      String
+  orderId     String?
+  vendorId    String?
+  materialId  String?
+  createdAt   DateTime      @default(now())
+  resolvedAt  DateTime?
+
+  order       PurchaseOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  vendor      Vendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  material    Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
+}

@@ -9,12 +9,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRole } from "@/context/RoleContext";
-import { ROLES, Role } from "@/lib/mockData";
+import { roles, type Role } from "@/lib/auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
 export function AppHeader() {
   const { role, setRole, user } = useRole();
+  const initials = user
+    ? user.name
+        .split(" ")
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "KC";
+
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card/80 backdrop-blur px-4">
       <SidebarTrigger className="text-muted-foreground" />
@@ -32,12 +41,12 @@ export function AppHeader() {
           Live • Shift A
         </div>
 
-        <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+        <Select value={role ?? undefined} onValueChange={(v) => setRole(v as Role)}>
           <SelectTrigger className="h-9 w-[200px] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ROLES.map((r) => (
+            {roles.map((r) => (
               <SelectItem key={r} value={r} className="text-xs">
                 {r}
               </SelectItem>
@@ -55,12 +64,12 @@ export function AppHeader() {
         <div className="flex items-center gap-2 pl-2 border-l border-border">
           <Avatar className="h-8 w-8">
             <AvatarFallback className="bg-primary-soft text-primary text-xs font-semibold">
-              RM
+              {initials}
             </AvatarFallback>
           </Avatar>
           <div className="hidden md:block leading-tight">
-            <div className="text-xs font-semibold">{user.name}</div>
-            <div className="text-[10px] text-muted-foreground">{role}</div>
+            <div className="text-xs font-semibold">{user?.name ?? "Guest"}</div>
+            <div className="text-[10px] text-muted-foreground">{role ?? "No role"}</div>
           </div>
         </div>
       </div>

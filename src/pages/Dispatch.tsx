@@ -1,12 +1,120 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { orders } from "@/lib/mockData";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { createShipment, fetchDispatch, updateShipment } from "@/lib/services";
+import type { DispatchItem } from "@/lib/types";
 import { Truck, FileText } from "lucide-react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
+
+const shipmentSchema = z.object({
+  dispatchDate: z.string().min(1, "Select a dispatch date"),
+  quantity: z.coerce.number().int().positive("Enter a valid quantity"),
+  invoiceNumber: z.string().optional(),
+});
+
+type ShipmentInput = z.infer<typeof shipmentSchema>;
 
 export default function Dispatch() {
-  const ready = orders.filter((o) => ["QA", "Dispatched"].includes(o.status));
+  const [target, setTarget] = useState<DispatchItem | null>(null);
+  const [editingShipmentId, setEditingShipmentId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const dispatchQuery = useQuery({
+    queryKey: ["dispatch"],
+    queryFn: fetchDispatch,
+  });
   const fmt = (n: number) => n.toLocaleString("en-IN");
+
+  const form = useForm<ShipmentInput>({
+    resolver: zodResolver(shipmentSchema),
+    defaultValues: { dispatchDate: "", quantity: undefined, invoiceNumber: "" },
+  });
+
+  const resetDialog = () => {
+    setTarget(null);
+    setEditingShipmentId(null);
+    form.reset({ dispatchDate: "", quantity: undefined, invoiceNumber: "" });
+  };
+
+  const openCreate = (order: DispatchItem) => {
+    setTarget(order);
+    setEditingShipmentId(null);
+    form.reset({ dispatchDate: "", quantity: undefined, invoiceNumber: "" });
+  };
+
+  const openEdit = (order: DispatchItem) => {
+    if (!order.latestShipment) return;
+    setTarget(order);
+    setEditingShipmentId(order.latestShipment.id);
+    form.reset({
+      dispatchDate: order.latestShipment.dispatchDate,
+      quantity: order.latestShipment.quantity,
+      invoiceNumber: order.latestShipment.invoiceNumber ?? "",
+    });
+  };
+
+  const shipmentMutation = useMutation({
+    mutationFn: (values: ShipmentInput) => {
+      if (editingShipmentId) {
+        return updateShipment(editingShipmentId, {
+          dispatchDate: values.dispatchDate,
+          quantity: values.quantity,
+          invoiceNumber: values.invoiceNumber,
+        });
+      }
+      return createShipment({
+        orderId: target!.id,
+        dispatchDate: values.dispatchDate,
+        quantity: values.quantity,
+        invoiceNumber: values.invoiceNumber,
+      });
+    },
+    onSuccess: async () => {
+      toast.success(editingShipmentId ? "Shipment updated" : "Dispatch scheduled", {
+        description: editingShipmentId ? "Shipment changes have been saved." : "Shipment has been recorded.",
+      });
+      resetDialog();
+      await queryClient.invalidateQueries({ queryKey: ["dispatch"] });
+      await queryClient.invalidateQueries({ queryKey: ["orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["order-detail"] });
+    },
+    onError: (error) => {
+      toast.error("Unable to schedule dispatch", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    },
+  });
+
+  if (dispatchQuery.isLoading) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">Loading dispatch...</div>;
+  }
+
+  if (dispatchQuery.isError || !dispatchQuery.data) {
+    return <div className="p-8 text-center text-sm text-destructive">Unable to load dispatch.</div>;
+  }
+
+  const ready = dispatchQuery.data.items;
 
   return (
     <div>
@@ -19,7 +127,7 @@ export default function Dispatch() {
             <Button variant="outline" size="sm" className="h-9">
               <FileText className="h-3.5 w-3.5 mr-1.5" /> Packing List
             </Button>
-            <Button size="sm" className="h-9">
+            <Button size="sm" className="h-9" disabled={!ready.length} onClick={() => ready[0] && openCreate(ready[0])}>
               <Truck className="h-3.5 w-3.5 mr-1.5" /> Schedule Dispatch
             </Button>
           </>
@@ -41,23 +149,105 @@ export default function Dispatch() {
             </tr>
           </thead>
           <tbody>
-            {ready.map((o) => (
-              <tr key={o.id} className="data-table-row">
-                <td className="px-4 py-3 font-mono-num text-xs font-semibold text-primary">{o.id}</td>
-                <td className="px-4 py-3">{o.brand}</td>
-                <td className="px-4 py-3">{o.styleName}</td>
-                <td className="px-4 py-3 text-right font-mono-num">{fmt(o.qty)}</td>
-                <td className="px-4 py-3 text-right font-mono-num font-semibold text-success">{fmt(o.delivered)}</td>
-                <td className="px-4 py-3 font-mono-num text-xs text-muted-foreground">{o.due}</td>
-                <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
-                <td className="px-4 py-3">
-                  <Button variant="outline" size="sm" className="h-7 text-xs">Generate Invoice</Button>
+            {ready.map((order) => (
+              <tr key={order.id} className="data-table-row">
+                <td className="px-4 py-3 font-mono-num text-xs font-semibold text-primary">{order.poNumber}</td>
+                <td className="px-4 py-3">{order.brand}</td>
+                <td className="px-4 py-3">{order.styleName}</td>
+                <td className="px-4 py-3 text-right font-mono-num">{fmt(order.qty)}</td>
+                <td className="px-4 py-3 text-right font-mono-num font-semibold text-success">{fmt(order.dispatched)}</td>
+                <td className="px-4 py-3 font-mono-num text-xs text-muted-foreground">{order.due}</td>
+                <td className="px-4 py-3"><StatusBadge status={order.status} /></td>
+                <td className="px-4 py-3 flex gap-2">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openCreate(order)}>
+                    Generate Invoice
+                  </Button>
+                  {order.latestShipment ? (
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openEdit(order)}>
+                      Edit Shipment
+                    </Button>
+                  ) : null}
                 </td>
               </tr>
             ))}
+            {ready.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No dispatch-ready orders.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      <Dialog open={Boolean(target)} onOpenChange={(open) => !open && resetDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingShipmentId ? "Edit Shipment" : "Schedule Dispatch"}</DialogTitle>
+            <DialogDescription>
+              {target ? `${editingShipmentId ? "Update" : "Create"} shipment for ${target.poNumber}.` : "Create shipment."}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit((values) => shipmentMutation.mutate(values))} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="dispatchDate"
+                render={({ field }) => (
+                  <Field label="Dispatch Date">
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="quantity"
+                render={({ field }) => (
+                  <Field label="Quantity">
+                    <FormControl>
+                      <Input type="number" placeholder="1000" {...field} />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="invoiceNumber"
+                render={({ field }) => (
+                  <Field label="Invoice Number">
+                    <FormControl>
+                      <Input placeholder="INV-2402" {...field} />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={resetDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={shipmentMutation.isPending}>
+                  {shipmentMutation.isPending ? "Saving..." : editingShipmentId ? "Save Changes" : "Save Shipment"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <FormItem className="space-y-1.5">
+      <FormLabel className="text-xs font-medium">{label}</FormLabel>
+      {children}
+    </FormItem>
   );
 }

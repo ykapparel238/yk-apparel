@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge";
-import { OrderStatus } from "@/lib/mockData";
 
 const map: Record<string, string> = {
   Created: "bg-muted text-muted-foreground border-border",
@@ -19,7 +18,7 @@ const map: Record<string, string> = {
   Inactive: "bg-muted text-muted-foreground border-border",
 };
 
-export function StatusBadge({ status }: { status: OrderStatus | string }) {
+export function StatusBadge({ status }: { status: string }) {
   return (
     <Badge
       variant="outline"

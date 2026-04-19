@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: knitcraft-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: knitcraft_mes
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - knitcraft_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  knitcraft_postgres_data:

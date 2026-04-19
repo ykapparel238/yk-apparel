@@ -1,5 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
-import { calendarDays, lines } from "@/lib/mockData";
+import { fetchPlanningCalendar } from "@/lib/services";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -7,9 +8,23 @@ const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function CalendarPage() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
+  const calendarQuery = useQuery({
+    queryKey: ["planning-calendar", "2024-11"],
+    queryFn: () => fetchPlanningCalendar("2024-11"),
+  });
 
   // Pad start so day 1 falls on column ~Wed for visual variety
   const padding = Array.from({ length: 2 }, (_, i) => i);
+
+  if (calendarQuery.isLoading) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">Loading production calendar...</div>;
+  }
+
+  if (calendarQuery.isError || !calendarQuery.data) {
+    return <div className="p-8 text-center text-sm text-destructive">Unable to load production calendar.</div>;
+  }
+
+  const { days: calendarDays, lines, monthLabel } = calendarQuery.data;
 
   return (
     <div>
@@ -23,7 +38,7 @@ export default function CalendarPage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" className="h-9 px-3">
-              November 2024
+              {monthLabel}
             </Button>
             <Button variant="outline" size="icon" className="h-9 w-9">
               <ChevronRight className="h-4 w-4" />
@@ -109,7 +124,6 @@ export default function CalendarPage() {
         </p>
         <div className="space-y-2.5">
           {lines.map((l, i) => {
-            const fill = 60 + ((i * 11) % 38);
             return (
               <div key={l.id} className="flex items-center gap-3">
                 <div className="w-32 shrink-0">
@@ -117,21 +131,18 @@ export default function CalendarPage() {
                   <div className="text-[10px] text-muted-foreground">{l.gauge}</div>
                 </div>
                 <div className="flex-1 h-7 bg-muted rounded overflow-hidden flex">
-                  <div
-                    className="h-full bg-chart-1 flex items-center px-2 text-[10px] text-primary-foreground font-medium truncate"
-                    style={{ width: `${fill * 0.55}%` }}
-                  >
-                    PO-24-101{(i % 9) + 1}
-                  </div>
-                  <div
-                    className="h-full bg-chart-3 flex items-center px-2 text-[10px] text-primary-foreground font-medium truncate"
-                    style={{ width: `${fill * 0.3}%` }}
-                  >
-                    PO-24-10{20 + (i % 5)}
-                  </div>
+                  {l.allocations.map((allocation, index) => (
+                    <div
+                      key={`${l.id}-${allocation.poNumber}-${index}`}
+                      className={`${index === 0 ? "bg-chart-1" : "bg-chart-3"} h-full flex items-center px-2 text-[10px] text-primary-foreground font-medium truncate`}
+                      style={{ width: `${allocation.width}%` }}
+                    >
+                      {allocation.poNumber}
+                    </div>
+                  ))}
                 </div>
                 <div className="w-12 text-right text-xs font-mono-num font-semibold">
-                  {fill}%
+                  {l.fill}%
                 </div>
               </div>
             );

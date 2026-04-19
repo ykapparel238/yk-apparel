@@ -1,8 +1,28 @@
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
-import { productionStages, lines } from "@/lib/mockData";
+import { fetchProductionLines, fetchProductionStages } from "@/lib/services";
 
 export default function Production() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
+  const stagesQuery = useQuery({
+    queryKey: ["production-stages"],
+    queryFn: fetchProductionStages,
+  });
+  const linesQuery = useQuery({
+    queryKey: ["production-lines"],
+    queryFn: fetchProductionLines,
+  });
+
+  if (stagesQuery.isLoading || linesQuery.isLoading) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">Loading production floor...</div>;
+  }
+
+  if (stagesQuery.isError || linesQuery.isError || !stagesQuery.data || !linesQuery.data) {
+    return <div className="p-8 text-center text-sm text-destructive">Unable to load production floor.</div>;
+  }
+
+  const productionStages = stagesQuery.data.items;
+  const lines = linesQuery.data.items;
 
   return (
     <div>

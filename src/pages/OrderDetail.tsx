@@ -1,23 +1,38 @@
+import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import {
-  bom,
-  challans,
-  colorBreakdown,
-  orders,
-  productionStages,
-  sizeBreakdown,
-} from "@/lib/mockData";
+import { fetchOrderDetail, fetchProductionStages } from "@/lib/services";
 import { ArrowLeft, Download, FileText, Printer } from "lucide-react";
 
 export default function OrderDetail() {
   const { id } = useParams();
-  const order = orders.find((o) => o.id === id) ?? orders[0];
   const fmt = (n: number) => n.toLocaleString("en-IN");
-  const sizes = sizeBreakdown.default;
-  const orderChallans = challans.filter((c) => c.po === order.id);
+  const orderQuery = useQuery({
+    queryKey: ["order-detail", id],
+    queryFn: () => fetchOrderDetail(id!),
+    enabled: Boolean(id),
+  });
+  const productionStagesQuery = useQuery({
+    queryKey: ["production-stages"],
+    queryFn: fetchProductionStages,
+  });
+
+  if (orderQuery.isLoading) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">Loading order details...</div>;
+  }
+
+  if (orderQuery.isError || !orderQuery.data) {
+    return <div className="p-8 text-center text-sm text-destructive">Unable to load order details.</div>;
+  }
+
+  const order = orderQuery.data.item;
+  const sizes = orderQuery.data.sizes;
+  const colorBreakdown = orderQuery.data.colors;
+  const bom = orderQuery.data.bom;
+  const orderChallans = orderQuery.data.challans;
+  const productionStages = productionStagesQuery.data?.items ?? [];
 
   return (
     <div>
@@ -32,7 +47,7 @@ export default function OrderDetail() {
 
       <PageHeader
         eyebrow={`${order.brand} • ${order.season}`}
-        title={`${order.id} — ${order.styleName}`}
+        title={`${order.poNumber} — ${order.styleName}`}
         description={`Style ${order.style} • Due ${order.due}`}
         actions={
           <>
@@ -234,7 +249,7 @@ export default function OrderDetail() {
               {orderChallans.map((c) => (
                 <tr key={c.id} className="data-table-row">
                   <td className="px-4 py-3 font-mono-num text-xs font-semibold text-primary">
-                    {c.id}
+                    {c.challanNumber}
                   </td>
                   <td className="px-4 py-3 text-xs font-mono-num text-muted-foreground">
                     {c.date}

@@ -11,6 +11,7 @@ const shipmentSchema = z.object({
   dispatchDate: z.string().min(1),
   quantity: z.coerce.number().int().positive(),
   invoiceNumber: z.string().optional(),
+  status: z.enum(["READY", "SCHEDULED", "DISPATCHED", "CANCELLED"]).optional(),
 });
 
 function mapStatus(value) {
@@ -31,6 +32,7 @@ function mapDispatchItem(order) {
     styleName: order.style.name,
     qty: order.quantity,
     dispatched: order.deliveredQty,
+    remaining: Math.max(0, order.quantity - order.deliveredQty),
     due: order.dueDate.toISOString().slice(0, 10),
     status: mapStatus(order.status),
     latestShipment: latestShipment
@@ -39,8 +41,16 @@ function mapDispatchItem(order) {
           dispatchDate: latestShipment.dispatchDate.toISOString().slice(0, 10),
           quantity: latestShipment.quantity,
           invoiceNumber: latestShipment.invoiceNumber ?? null,
+          status: mapStatus(latestShipment.status),
         }
       : null,
+    shipments: (order.shipments ?? []).map((shipment) => ({
+      id: shipment.id,
+      dispatchDate: shipment.dispatchDate.toISOString().slice(0, 10),
+      quantity: shipment.quantity,
+      invoiceNumber: shipment.invoiceNumber ?? null,
+      status: mapStatus(shipment.status),
+    })),
   };
 }
 
@@ -50,6 +60,15 @@ function deriveOrderStatus(totalDelivered, quantity) {
 
 function deriveShipmentStatus(totalDelivered, quantity) {
   return totalDelivered >= quantity ? "DISPATCHED" : "SCHEDULED";
+}
+
+function getDeliveredFromShipments(shipments, overrideId = null, overrideQuantity = 0, overrideStatus = null) {
+  return shipments.reduce((sum, shipment) => {
+    const currentStatus = shipment.id === overrideId ? overrideStatus ?? shipment.status : shipment.status;
+    const currentQuantity = shipment.id === overrideId ? overrideQuantity : shipment.quantity;
+    if (currentStatus === "CANCELLED") return sum;
+    return sum + currentQuantity;
+  }, 0);
 }
 
 async function getDispatchOrder(orderId) {
@@ -77,7 +96,6 @@ router.get("/", asyncHandler(async (_req, res) => {
       style: true,
       shipments: {
         orderBy: { createdAt: "desc" },
-        take: 1,
       },
     },
     orderBy: { dueDate: "asc" },
@@ -114,7 +132,16 @@ router.post("/shipments", requireRoles("ADMIN", "DISPATCH_MANAGER", "FACTORY_MAN
   const last = latest?.shipmentNumber?.match(/SHIP-(\d+)/)?.[1];
   const nextNumber = `SHIP-${last ? Number(last) + 1 : 2402}`;
 
-  const deliveredQty = order.deliveredQty + parsed.data.quantity;
+  const shipmentStatus = parsed.data.status ?? deriveShipmentStatus(order.deliveredQty + parsed.data.quantity, order.quantity);
+  const deliveredQty = shipmentStatus === "CANCELLED"
+    ? order.deliveredQty
+    : order.deliveredQty + parsed.data.quantity;
+
+  if (deliveredQty > order.quantity) {
+    const remaining = Math.max(0, order.quantity - order.deliveredQty);
+    return fail(res, 409, `Dispatch quantity exceeds remaining balance (${remaining.toLocaleString("en-IN")})`, "OVER_DISPATCH");
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.dispatchShipment.create({
       data: {
@@ -123,7 +150,7 @@ router.post("/shipments", requireRoles("ADMIN", "DISPATCH_MANAGER", "FACTORY_MAN
         dispatchDate,
         quantity: parsed.data.quantity,
         invoiceNumber: parsed.data.invoiceNumber?.trim() || null,
-        status: deriveShipmentStatus(deliveredQty, order.quantity),
+        status: shipmentStatus,
       },
     });
     await tx.purchaseOrder.update({
@@ -176,9 +203,11 @@ router.patch("/shipments/:id", requireRoles("ADMIN", "DISPATCH_MANAGER", "FACTOR
   }
 
   const otherQty = shipment.order.shipments
-    .filter((item) => item.id !== shipment.id)
+    .filter((item) => item.id !== shipment.id && item.status !== "CANCELLED")
     .reduce((sum, item) => sum + item.quantity, 0);
-  const nextDeliveredQty = otherQty + parsed.data.quantity;
+  const nextStatus = parsed.data.status ?? shipment.status;
+  const currentQty = nextStatus === "CANCELLED" ? 0 : parsed.data.quantity;
+  const nextDeliveredQty = otherQty + currentQty;
 
   if (nextDeliveredQty > shipment.order.quantity) {
     const remaining = Math.max(0, shipment.order.quantity - otherQty);
@@ -192,7 +221,7 @@ router.patch("/shipments/:id", requireRoles("ADMIN", "DISPATCH_MANAGER", "FACTOR
         dispatchDate,
         quantity: parsed.data.quantity,
         invoiceNumber: parsed.data.invoiceNumber?.trim() || null,
-        status: deriveShipmentStatus(nextDeliveredQty, shipment.order.quantity),
+        status: nextStatus,
       },
     });
     await tx.purchaseOrder.update({

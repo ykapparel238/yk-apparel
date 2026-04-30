@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { asyncHandler, fail, ok } from "../http.mjs";
-import { getReportRows, getReportSummaries, toCsv } from "../reporting.mjs";
+import { getReportRows, getReportSummaries, toCsv, toPdfBuffer } from "../reporting.mjs";
 
 const router = Router();
 
@@ -30,6 +30,17 @@ router.get("/:slug.csv", asyncHandler(async (req, res) => {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${payload.report.slug}.csv"`);
   return res.status(200).send(toCsv(payload.rows));
+}));
+
+router.get("/:slug.pdf", asyncHandler(async (req, res) => {
+  const payload = await getReportRows(req.params.slug);
+  if (!payload) {
+    return fail(res, 404, "Report not found", "REPORT_NOT_FOUND");
+  }
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${payload.report.slug}.pdf"`);
+  return res.status(200).send(toPdfBuffer(payload.report.name, payload.rows));
 }));
 
 export default router;

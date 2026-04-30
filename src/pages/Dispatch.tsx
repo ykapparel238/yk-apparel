@@ -20,6 +20,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createShipment, fetchDispatch, updateShipment } from "@/lib/services";
 import type { DispatchItem } from "@/lib/types";
 import { Truck, FileText } from "lucide-react";
@@ -32,6 +39,7 @@ const shipmentSchema = z.object({
   dispatchDate: z.string().min(1, "Select a dispatch date"),
   quantity: z.coerce.number().int().positive("Enter a valid quantity"),
   invoiceNumber: z.string().optional(),
+  status: z.enum(["READY", "SCHEDULED", "DISPATCHED", "CANCELLED"]).default("SCHEDULED"),
 });
 
 type ShipmentInput = z.infer<typeof shipmentSchema>;
@@ -48,19 +56,19 @@ export default function Dispatch() {
 
   const form = useForm<ShipmentInput>({
     resolver: zodResolver(shipmentSchema),
-    defaultValues: { dispatchDate: "", quantity: undefined, invoiceNumber: "" },
+    defaultValues: { dispatchDate: "", quantity: undefined, invoiceNumber: "", status: "SCHEDULED" },
   });
 
   const resetDialog = () => {
     setTarget(null);
     setEditingShipmentId(null);
-    form.reset({ dispatchDate: "", quantity: undefined, invoiceNumber: "" });
+    form.reset({ dispatchDate: "", quantity: undefined, invoiceNumber: "", status: "SCHEDULED" });
   };
 
   const openCreate = (order: DispatchItem) => {
     setTarget(order);
     setEditingShipmentId(null);
-    form.reset({ dispatchDate: "", quantity: undefined, invoiceNumber: "" });
+    form.reset({ dispatchDate: "", quantity: order.remaining || undefined, invoiceNumber: "", status: "SCHEDULED" });
   };
 
   const openEdit = (order: DispatchItem) => {
@@ -71,6 +79,7 @@ export default function Dispatch() {
       dispatchDate: order.latestShipment.dispatchDate,
       quantity: order.latestShipment.quantity,
       invoiceNumber: order.latestShipment.invoiceNumber ?? "",
+      status: normalizeShipmentStatus(order.latestShipment.status),
     });
   };
 
@@ -81,6 +90,7 @@ export default function Dispatch() {
           dispatchDate: values.dispatchDate,
           quantity: values.quantity,
           invoiceNumber: values.invoiceNumber,
+          status: values.status,
         });
       }
       return createShipment({
@@ -88,6 +98,7 @@ export default function Dispatch() {
         dispatchDate: values.dispatchDate,
         quantity: values.quantity,
         invoiceNumber: values.invoiceNumber,
+        status: values.status,
       });
     },
     onSuccess: async () => {
@@ -100,7 +111,7 @@ export default function Dispatch() {
       await queryClient.invalidateQueries({ queryKey: ["order-detail"] });
     },
     onError: (error) => {
-      toast.error("Unable to schedule dispatch", {
+      toast.error("Unable to save shipment", {
         description: error instanceof Error ? error.message : "Please try again.",
       });
     },
@@ -143,6 +154,7 @@ export default function Dispatch() {
               <th className="px-4 py-3 font-semibold">Style</th>
               <th className="px-4 py-3 font-semibold text-right">Total Qty</th>
               <th className="px-4 py-3 font-semibold text-right">Dispatched</th>
+              <th className="px-4 py-3 font-semibold text-right">Remaining</th>
               <th className="px-4 py-3 font-semibold">Due</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               <th className="px-4 py-3 font-semibold">Action</th>
@@ -156,11 +168,12 @@ export default function Dispatch() {
                 <td className="px-4 py-3">{order.styleName}</td>
                 <td className="px-4 py-3 text-right font-mono-num">{fmt(order.qty)}</td>
                 <td className="px-4 py-3 text-right font-mono-num font-semibold text-success">{fmt(order.dispatched)}</td>
+                <td className="px-4 py-3 text-right font-mono-num text-warning">{fmt(order.remaining)}</td>
                 <td className="px-4 py-3 font-mono-num text-xs text-muted-foreground">{order.due}</td>
                 <td className="px-4 py-3"><StatusBadge status={order.status} /></td>
                 <td className="px-4 py-3 flex gap-2">
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openCreate(order)}>
-                    Generate Invoice
+                    Add Shipment
                   </Button>
                   {order.latestShipment ? (
                     <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openEdit(order)}>
@@ -172,7 +185,7 @@ export default function Dispatch() {
             ))}
             {ready.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted-foreground">
                   No dispatch-ready orders.
                 </td>
               </tr>
@@ -227,6 +240,47 @@ export default function Dispatch() {
                   </Field>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <Field label="Shipment Status">
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="READY">Ready</SelectItem>
+                        <SelectItem value="SCHEDULED">Scheduled</SelectItem>
+                        <SelectItem value="DISPATCHED">Dispatched</SelectItem>
+                        {editingShipmentId ? <SelectItem value="CANCELLED">Cancelled</SelectItem> : null}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )}
+              />
+              {target?.shipments?.length ? (
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="text-xs font-medium mb-2">Shipment History</div>
+                  <div className="space-y-2">
+                    {target.shipments.slice(0, 3).map((shipment) => (
+                      <div key={shipment.id} className="flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-mono-num">{shipment.dispatchDate}</div>
+                          <div className="text-muted-foreground">{shipment.invoiceNumber || "No invoice"}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-mono-num">{fmt(shipment.quantity)}</div>
+                          <div className="text-muted-foreground">{shipment.status}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={resetDialog}>
                   Cancel
@@ -241,6 +295,21 @@ export default function Dispatch() {
       </Dialog>
     </div>
   );
+}
+
+function normalizeShipmentStatus(value: string | undefined) {
+  switch (value) {
+    case "Ready":
+      return "READY";
+    case "Scheduled":
+      return "SCHEDULED";
+    case "Dispatched":
+      return "DISPATCHED";
+    case "Cancelled":
+      return "CANCELLED";
+    default:
+      return "SCHEDULED";
+  }
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

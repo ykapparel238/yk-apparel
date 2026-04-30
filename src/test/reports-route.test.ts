@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const getReportSummaries = vi.fn();
 const getReportRows = vi.fn();
 const toCsv = vi.fn();
+const toPdfBuffer = vi.fn();
 
 vi.mock("../../server/reporting.mjs", () => ({
   getReportSummaries,
   getReportRows,
   toCsv,
+  toPdfBuffer,
 }));
 
 function createRes() {
@@ -63,7 +65,7 @@ describe("reports route", () => {
   it("returns report summaries", async () => {
     const route = (await import("../../server/routes/reports.mjs")).default;
     getReportSummaries.mockResolvedValue({
-      items: [{ slug: "stock-report", name: "Stock Report", desc: "desc", category: "Stores", rows: 4, downloadUrl: "/api/reports/stock-report.csv" }],
+      items: [{ slug: "stock-report", name: "Stock Report", desc: "desc", category: "Stores", rows: 4, downloadUrl: "/api/reports/stock-report.csv", pdfUrl: "/api/reports/stock-report.pdf" }],
     });
 
     const { res } = await invokeRoute(route, "get", "/");
@@ -102,5 +104,22 @@ describe("reports route", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["Content-Type"]).toContain("text/csv");
     expect(res.body).toContain("Y001");
+  });
+
+  it("returns PDF output by slug", async () => {
+    const route = (await import("../../server/routes/reports.mjs")).default;
+    getReportRows.mockResolvedValue({
+      report: { slug: "stock-report", name: "Stock Report", category: "Stores" },
+      rows: [{ sku: "Y001", freeQty: 50 }],
+    });
+    toPdfBuffer.mockReturnValue(Buffer.from("%PDF-1.4"));
+
+    const { res } = await invokeRoute(route, "get", "/:slug.pdf", {
+      params: { slug: "stock-report" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["Content-Type"]).toContain("application/pdf");
+    expect(String(res.body)).toContain("%PDF-1.4");
   });
 });

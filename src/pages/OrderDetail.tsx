@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { fetchOrderDetail, fetchProductionStages } from "@/lib/services";
-import { ArrowLeft, Download, FileText, Printer } from "lucide-react";
+import { ArrowLeft, Download, FileText, Pencil, Printer, Trash2 } from "lucide-react";
 
 export default function OrderDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const fmt = (n: number) => n.toLocaleString("en-IN");
   const orderQuery = useQuery({
     queryKey: ["order-detail", id],
@@ -51,6 +52,22 @@ export default function OrderDetail() {
         description={`Style ${order.style} • Due ${order.due}`}
         actions={
           <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => navigate("/orders", { state: { openOrderAction: "edit", orderId: order.id } })}
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit Order
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => navigate("/orders", { state: { openOrderAction: "delete", orderId: order.id } })}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete Order
+            </Button>
             <Button variant="outline" size="sm" className="h-9">
               <Printer className="h-3.5 w-3.5 mr-1.5" /> Print
             </Button>

@@ -50,6 +50,10 @@ export default function Reports() {
     window.open(report.downloadUrl, "_blank", "noopener,noreferrer");
   };
 
+  const downloadPdf = (report: (typeof reports)[number]) => {
+    window.open(report.pdfUrl, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div>
       <PageHeader
@@ -80,7 +84,7 @@ export default function Reports() {
                   <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => downloadCsv(report)}>
                     <Download className="h-3 w-3 mr-1.5" /> CSV
                   </Button>
-                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => toast(`${report.name} PDF export will follow this data pass`)}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => downloadPdf(report)}>
                     <Download className="h-3 w-3 mr-1.5" /> PDF
                   </Button>
                   <Button size="sm" className="h-8 text-xs ml-auto" disabled={previewMutation.isPending} onClick={() => previewMutation.mutate(report.slug)}>

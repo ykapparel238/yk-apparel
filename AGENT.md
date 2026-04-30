@@ -101,7 +101,7 @@ Status values:
   - business-rule tests added for order normalization and allocation validation
   - route-level tests now cover order creation audit flow and invalid delivered-vs-quantity lifecycle updates
 - Left:
-  - optional edit/delete entry points from OrderDetail
+  - no major gaps in current MVP scope; continue with live deploy verification
 
 ### 4. Planning and Capacity
 - Status: `partially_done`
@@ -169,8 +169,11 @@ Status values:
   - shipment edit flow added in the existing dispatch dialog
   - route-level tests now cover status filtering, invalid dates, over-dispatch rejection, create flow, and shipment update recalculation
   - dispatch route tests now cover full-delivery transition to `DISPATCHED`
+  - shipment status lifecycle now supports ready/scheduled/dispatched/cancelled updates in the existing dialog
+  - dispatch list now shows remaining balance and shipment history in the existing UI pattern
+  - shipment cancellation/correction now recalculates delivered quantity from active shipments only
 - Left:
-  - richer shipment lifecycle handling beyond the current correction model
+  - no major gaps in current MVP scope; continue with live deploy verification
 
 ### 9. Settings
 - Status: `partially_done`
@@ -205,11 +208,12 @@ Status values:
   - `/api/reports` route added
   - Reports page switched from static cards to DB-backed report availability counts
   - real report detail endpoints and CSV export endpoints added
+  - PDF export endpoints added for the same report catalog
   - MRP shortage visibility is now surfaced inside the Reports screen
   - report-side MRP rows now reflect active procurement request state
-  - route-level tests now cover report summary, detail, and CSV export flows
+  - route-level tests now cover report summary, detail, CSV export, and PDF export flows
 - Left:
-  - PDF export if needed later
+  - continue with reconciliation and live deploy verification
 
 ### 12. MRP MVP
 - Status: `partially_done`
@@ -220,11 +224,19 @@ Status values:
   - MRP shortage data is now visible in the Reports UI
   - dedicated MRP calculation tests added
   - MRP rows now expose active procurement request state so shortages can be actioned safely
+  - forecast/wastage and order-risk report outputs are now available through the existing Reports catalog
 - Left:
   - deeper reconciliation coverage
 
 ### 13. Forecasting / Wastage / Risk
-- Status: `post_mvp`
+- Status: `partially_done`
+- Pages: Reports
+- Done:
+  - forecast and wastage model report added using risk-adjusted MRP outputs
+  - order risk watchlist report added using due-date, shortage, vendor-pending, and progress signals
+  - these analytical views are exposed without adding a new screen by extending the existing Reports catalog
+- Left:
+  - deeper model calibration if the business wants production-grade planning science beyond current heuristics
 - Pages: none yet
 
 ## Page Mapping

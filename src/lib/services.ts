@@ -422,7 +422,13 @@ export async function fetchDispatch() {
   return api<DispatchPayload>("/api/dispatch");
 }
 
-export async function createShipment(payload: { orderId: string; dispatchDate: string; quantity: number; invoiceNumber?: string }) {
+export async function createShipment(payload: {
+  orderId: string;
+  dispatchDate: string;
+  quantity: number;
+  invoiceNumber?: string;
+  status?: "READY" | "SCHEDULED" | "DISPATCHED" | "CANCELLED";
+}) {
   return api<{ item: DispatchPayload["items"][number] }>("/api/dispatch/shipments", {
     method: "POST",
     body: JSON.stringify(payload),

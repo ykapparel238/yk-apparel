@@ -53,7 +53,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Sheet,
   SheetContent,
@@ -151,6 +151,7 @@ export default function Orders() {
   const [editingOrder, setEditingOrder] = useState<OrderItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OrderItem | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const fmt = (n: number) => n.toLocaleString("en-IN");
 
@@ -237,6 +238,24 @@ export default function Orders() {
       form.setValue("colorAllocations", buildColorDefaults(selectedStyle.colors ?? []), { shouldValidate: true });
     }
   }, [editingOrder, form, optionsQuery.data?.styles, watchedStyleId]);
+
+  useEffect(() => {
+    const action = location.state?.openOrderAction;
+    const orderId = location.state?.orderId;
+    if (!action || !orderId || !ordersQuery.data?.items?.length) return;
+
+    const matchedOrder = ordersQuery.data.items.find((item) => item.id === orderId);
+    if (!matchedOrder) return;
+
+    if (action === "edit") {
+      openEdit(matchedOrder);
+    }
+    if (action === "delete") {
+      setDeleteTarget(matchedOrder);
+    }
+
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate, ordersQuery.data?.items]);
 
   const invalidateOrders = async () => {
     await queryClient.invalidateQueries({ queryKey: ["orders"] });

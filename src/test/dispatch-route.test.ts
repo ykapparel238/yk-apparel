@@ -147,7 +147,7 @@ describe("dispatch route", () => {
         status: "READY_TO_DISPATCH",
         brand: { name: "Brand A" },
         style: { name: "Style A" },
-        shipments: [{ id: "ship-1", shipmentNumber: "SHIP-2402", dispatchDate: new Date("2026-05-02T00:00:00.000Z"), quantity: 30, invoiceNumber: "INV-1" }],
+        shipments: [{ id: "ship-1", shipmentNumber: "SHIP-2402", dispatchDate: new Date("2026-05-02T00:00:00.000Z"), quantity: 30, invoiceNumber: "INV-1", status: "SCHEDULED" }],
       });
     prisma.dispatchShipment.findFirst.mockResolvedValue(null);
     prisma.dispatchShipment.create.mockResolvedValue({});
@@ -175,8 +175,8 @@ describe("dispatch route", () => {
         id: "ord-1",
         quantity: 100,
         shipments: [
-          { id: "ship-1", quantity: 30 },
-          { id: "ship-2", quantity: 20 },
+          { id: "ship-1", quantity: 30, status: "SCHEDULED" },
+          { id: "ship-2", quantity: 20, status: "DISPATCHED" },
         ],
       },
     });
@@ -191,7 +191,7 @@ describe("dispatch route", () => {
       status: "READY_TO_DISPATCH",
       brand: { name: "Brand A" },
       style: { name: "Style A" },
-      shipments: [{ id: "ship-1", dispatchDate: new Date("2026-05-03T00:00:00.000Z"), quantity: 40, invoiceNumber: "INV-2" }],
+      shipments: [{ id: "ship-1", dispatchDate: new Date("2026-05-03T00:00:00.000Z"), quantity: 40, invoiceNumber: "INV-2", status: "SCHEDULED" }],
     });
 
     const { res } = await invokeRoute(route, "patch", "/shipments/:id", {
@@ -228,7 +228,7 @@ describe("dispatch route", () => {
         status: "DISPATCHED",
         brand: { name: "Brand A" },
         style: { name: "Style A" },
-        shipments: [{ id: "ship-9", shipmentNumber: "SHIP-2409", dispatchDate: new Date("2026-05-03T00:00:00.000Z"), quantity: 10, invoiceNumber: "INV-9" }],
+        shipments: [{ id: "ship-9", shipmentNumber: "SHIP-2409", dispatchDate: new Date("2026-05-03T00:00:00.000Z"), quantity: 10, invoiceNumber: "INV-9", status: "DISPATCHED" }],
       });
     prisma.dispatchShipment.findFirst.mockResolvedValue({ shipmentNumber: "SHIP-2408" });
     prisma.dispatchShipment.create.mockResolvedValue({});
@@ -242,6 +242,60 @@ describe("dispatch route", () => {
     expect(prisma.purchaseOrder.update).toHaveBeenCalledWith({
       where: { id: "ord-1" },
       data: { deliveredQty: 100, status: "DISPATCHED" },
+    });
+  });
+
+  it("cancels a shipment and recalculates delivered qty from active shipments only", async () => {
+    const route = (await import("../../server/routes/dispatch.mjs")).default;
+    prisma.dispatchShipment.findUnique.mockResolvedValue({
+      id: "ship-1",
+      shipmentNumber: "SHIP-2402",
+      orderId: "ord-1",
+      status: "SCHEDULED",
+      order: {
+        id: "ord-1",
+        quantity: 100,
+        shipments: [
+          { id: "ship-1", quantity: 30, status: "SCHEDULED" },
+          { id: "ship-2", quantity: 40, status: "DISPATCHED" },
+        ],
+      },
+    });
+    prisma.dispatchShipment.update.mockResolvedValue({});
+    prisma.purchaseOrder.update.mockResolvedValue({});
+    prisma.purchaseOrder.findUnique.mockResolvedValue({
+      id: "ord-1",
+      poNumber: "PO-1",
+      quantity: 100,
+      deliveredQty: 40,
+      dueDate: new Date("2026-05-20T00:00:00.000Z"),
+      status: "READY_TO_DISPATCH",
+      brand: { name: "Brand A" },
+      style: { name: "Style A" },
+      shipments: [
+        { id: "ship-1", shipmentNumber: "SHIP-2402", dispatchDate: new Date("2026-05-03T00:00:00.000Z"), quantity: 30, invoiceNumber: "INV-2", status: "CANCELLED" },
+        { id: "ship-2", shipmentNumber: "SHIP-2403", dispatchDate: new Date("2026-05-04T00:00:00.000Z"), quantity: 40, invoiceNumber: "INV-3", status: "DISPATCHED" },
+      ],
+    });
+
+    const { res } = await invokeRoute(route, "patch", "/shipments/:id", {
+      params: { id: "ship-1" },
+      body: { dispatchDate: "2026-05-03", quantity: 30, invoiceNumber: "INV-2", status: "CANCELLED" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith({
+      where: { id: "ord-1" },
+      data: { deliveredQty: 40, status: "READY_TO_DISPATCH" },
+    });
+    expect(prisma.dispatchShipment.update).toHaveBeenCalledWith({
+      where: { id: "ship-1" },
+      data: {
+        dispatchDate: new Date("2026-05-03"),
+        quantity: 30,
+        invoiceNumber: "INV-2",
+        status: "CANCELLED",
+      },
     });
   });
 });

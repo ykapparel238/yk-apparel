@@ -10,15 +10,24 @@ import {
   serializeUser,
 } from "../auth.mjs";
 import { fail, ok, asyncHandler } from "../http.mjs";
+import { createRateLimiter } from "../rate-limit.mjs";
+import { getEnv } from "../env.mjs";
 
 const router = Router();
+const env = getEnv();
+const loginRateLimiter = createRateLimiter({
+  windowMs: env.AUTH_RATE_LIMIT_WINDOW_MS,
+  max: env.AUTH_RATE_LIMIT_MAX,
+  code: "LOGIN_RATE_LIMITED",
+  message: "Too many login attempts. Please try again shortly.",
+});
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
 });
 
-router.post("/login", asyncHandler(async (req, res) => {
+router.post("/login", loginRateLimiter, asyncHandler(async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return fail(res, 400, "Invalid login payload", "INVALID_LOGIN_PAYLOAD", parsed.error.flatten());

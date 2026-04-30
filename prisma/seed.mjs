@@ -4,9 +4,14 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "true") {
+    throw new Error("Refusing to run seed in production without ALLOW_PROD_SEED=true");
+  }
+
   await prisma.alert.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.session.deleteMany();
+  await prisma.procurementRequest.deleteMany();
   await prisma.dispatchShipment.deleteMany();
   await prisma.qaInspectionDefect.deleteMany();
   await prisma.qaInspection.deleteMany();
@@ -269,6 +274,29 @@ async function main() {
       invoiceNumber: "INV-2401",
       status: "SCHEDULED",
     },
+  });
+
+  await prisma.procurementRequest.createMany({
+    data: [
+      {
+        materialId: materials[1].id,
+        supplierId: suppliers[1].id,
+        createdByUserId: users[4].id,
+        shortageQty: "2336.00",
+        requestedQty: "2400.00",
+        note: "Open demand shortfall for H&M V-Neck Pullover",
+        status: "OPEN",
+      },
+      {
+        materialId: materials[0].id,
+        supplierId: suppliers[0].id,
+        createdByUserId: users[4].id,
+        shortageQty: "0.00",
+        requestedQty: "1500.00",
+        note: "Buffer replenishment completed",
+        status: "CLOSED",
+      },
+    ],
   });
 
   await prisma.auditLog.createMany({

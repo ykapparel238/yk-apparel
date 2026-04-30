@@ -2,9 +2,9 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { prisma } from "./db.mjs";
 import { getEnv } from "./env.mjs";
+import { formatEnumLabel } from "./constants.mjs";
 
 const SESSION_COOKIE = "kc_session";
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const LAST_ACTIVE_INTERVAL_MS = 1000 * 60 * 5;
 
 function sha256(value) {
@@ -20,29 +20,17 @@ export function getSessionCookieOptions(expiresAt) {
   return {
     httpOnly: true,
     sameSite: "lax",
-    secure: env.NODE_ENV === "production",
+    secure: env.COOKIE_SECURE ?? env.NODE_ENV === "production",
     expires: expiresAt,
     path: "/",
   };
 }
 
-function prettifyEnum(value) {
-  if (value === "QA") return "QA";
-  return value
-    .toLowerCase()
-    .split("_")
-    .map((part) => {
-      if (part === "qa") return "QA";
-      if (part === "otif") return "OTIF";
-      return part.charAt(0).toUpperCase() + part.slice(1);
-    })
-    .join(" ");
-}
-
 export async function createSession(userId) {
+  const env = getEnv();
   const rawToken = crypto.randomBytes(32).toString("hex");
   const tokenHash = sha256(rawToken);
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  const expiresAt = new Date(Date.now() + env.SESSION_TTL_HOURS * 60 * 60 * 1000);
 
   await prisma.session.create({
     data: {
@@ -94,7 +82,7 @@ export function serializeUser(user) {
     employeeCode: user.employeeCode,
     name: user.name,
     email: user.email,
-    role: prettifyEnum(user.role),
+    role: formatEnumLabel(user.role),
   };
 }
 

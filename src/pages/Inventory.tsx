@@ -19,10 +19,17 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { createInventoryAdjustment, fetchInventory } from "@/lib/services";
-import type { InventoryItem } from "@/lib/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { createInventoryAdjustment, createProcurementRequest, fetchInventory, fetchProcurementRequests, updateProcurementRequest } from "@/lib/services";
+import type { InventoryItem, ProcurementRequestItem } from "@/lib/types";
 import { useForm } from "react-hook-form";
-import { AlertTriangle, Pencil } from "lucide-react";
+import { AlertTriangle, Pencil, ShoppingCart } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -31,21 +38,37 @@ const adjustmentSchema = z.object({
   deltaQty: z.coerce.number().refine((value) => value !== 0, "Adjustment cannot be zero"),
   reason: z.string().min(2, "Enter a reason"),
 });
+const procurementSchema = z.object({
+  requestedQty: z.coerce.number().positive("Enter a valid quantity"),
+  note: z.string().min(2, "Enter a reason"),
+  status: z.enum(["OPEN", "IN_PROGRESS", "CLOSED"]).default("OPEN"),
+});
 
 type AdjustmentInput = z.infer<typeof adjustmentSchema>;
+type ProcurementInput = z.infer<typeof procurementSchema>;
 
 export default function Inventory() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<InventoryItem | null>(null);
+  const [procurementTarget, setProcurementTarget] = useState<InventoryItem | null>(null);
+  const [editingProcurement, setEditingProcurement] = useState<ProcurementRequestItem | null>(null);
   const inventoryQuery = useQuery({
     queryKey: ["inventory"],
     queryFn: fetchInventory,
+  });
+  const procurementQuery = useQuery({
+    queryKey: ["procurement-requests"],
+    queryFn: fetchProcurementRequests,
   });
 
   const form = useForm<AdjustmentInput>({
     resolver: zodResolver(adjustmentSchema),
     defaultValues: { deltaQty: undefined, reason: "" },
+  });
+  const procurementForm = useForm<ProcurementInput>({
+    resolver: zodResolver(procurementSchema),
+    defaultValues: { requestedQty: undefined, note: "", status: "OPEN" },
   });
 
   const adjustmentMutation = useMutation({
@@ -67,17 +90,68 @@ export default function Inventory() {
       });
     },
   });
+  const procurementMutation = useMutation({
+    mutationFn: (values: ProcurementInput) => {
+      if (editingProcurement) {
+        return updateProcurementRequest(editingProcurement.id, values);
+      }
+      return createProcurementRequest({
+        materialId: procurementTarget!.materialId,
+        requestedQty: values.requestedQty,
+        note: values.note,
+      });
+    },
+    onSuccess: async () => {
+      toast.success(editingProcurement ? "Procurement request updated" : "Procurement request created", {
+        description: editingProcurement ? "Request status has been updated." : "Shortage has been sent for procurement action.",
+      });
+      setProcurementTarget(null);
+      setEditingProcurement(null);
+      procurementForm.reset({ requestedQty: undefined, note: "", status: "OPEN" });
+      await queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      await queryClient.invalidateQueries({ queryKey: ["mrp"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-requests"] });
+      await queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+    onError: (error) => {
+      toast.error("Unable to save procurement request", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    },
+  });
 
-  if (inventoryQuery.isLoading) {
+  if (inventoryQuery.isLoading || procurementQuery.isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground">Loading inventory...</div>;
   }
 
-  if (inventoryQuery.isError || !inventoryQuery.data) {
+  if (inventoryQuery.isError || !inventoryQuery.data || procurementQuery.isError || !procurementQuery.data) {
     return <div className="p-8 text-center text-sm text-destructive">Unable to load inventory.</div>;
   }
 
   const inventory = inventoryQuery.data.items;
   const low = inventoryQuery.data.lowStockCount;
+  const procurementRequests = procurementQuery.data.items;
+
+  const openProcurementDialog = (item: InventoryItem) => {
+    setProcurementTarget(item);
+    const activeRequest = item.activeProcurementRequest;
+    if (activeRequest) {
+      const found = procurementRequests.find((request) => request.id === activeRequest.id) ?? null;
+      setEditingProcurement(found);
+      procurementForm.reset({
+        requestedQty: found?.requestedQty ?? item.shortage,
+        note: found?.note ?? "",
+        status: found?.status === "In Progress" ? "IN_PROGRESS" : found?.status === "Closed" ? "CLOSED" : "OPEN",
+      });
+      return;
+    }
+    setEditingProcurement(null);
+    procurementForm.reset({
+      requestedQty: item.shortage || undefined,
+      note: `Shortage action for ${item.name}`,
+      status: "OPEN",
+    });
+  };
 
   return (
     <div>
@@ -98,9 +172,11 @@ export default function Inventory() {
               <th className="px-4 py-3 font-semibold text-right">Allocated</th>
               <th className="px-4 py-3 font-semibold text-right">Free</th>
               <th className="px-4 py-3 font-semibold text-right">Min Level</th>
+              <th className="px-4 py-3 font-semibold text-right">Shortage</th>
               <th className="px-4 py-3 font-semibold">Supplier</th>
               <th className="px-4 py-3 font-semibold w-40">Stock Health</th>
-              <th className="px-4 py-3 font-semibold w-12"></th>
+              <th className="px-4 py-3 font-semibold">Procurement</th>
+              <th className="px-4 py-3 font-semibold w-28"></th>
             </tr>
           </thead>
           <tbody>
@@ -121,6 +197,9 @@ export default function Inventory() {
                     {fmt(free)}
                   </td>
                   <td className="px-4 py-3 text-right font-mono-num text-xs text-muted-foreground">{fmt(item.min)}</td>
+                  <td className={`px-4 py-3 text-right font-mono-num font-semibold ${item.shortage > 0 ? "text-warning" : "text-muted-foreground"}`}>
+                    {fmt(item.shortage)}
+                  </td>
                   <td className="px-4 py-3 text-xs">{item.supplier}</td>
                   <td className="px-4 py-3">
                     {lowStock ? (
@@ -136,14 +215,71 @@ export default function Inventory() {
                       </div>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-xs">
+                    {item.activeProcurementRequest ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-primary font-medium">
+                        <ShoppingCart className="h-3.5 w-3.5" /> {item.activeProcurementRequest.status}
+                      </span>
+                    ) : item.shortage > 0 ? (
+                      <span className="text-warning font-medium">Needed</span>
+                    ) : (
+                      <span className="text-muted-foreground">Covered</span>
+                    )}
+                  </td>
                   <td className="px-2 py-3 text-right">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setTarget(item)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {item.shortage > 0 ? (
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openProcurementDialog(item)}>
+                          {item.activeProcurementRequest ? "Update Req" : "Request"}
+                        </Button>
+                      ) : null}
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setTarget(item)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="bg-card border border-border rounded-lg overflow-hidden mt-4">
+        <div className="p-5 border-b border-border">
+          <h3 className="text-sm font-semibold">Procurement Requests</h3>
+          <p className="text-xs text-muted-foreground">Shortage-driven request tracking for materials</p>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <tr className="text-left">
+              <th className="px-4 py-3 font-semibold">SKU</th>
+              <th className="px-4 py-3 font-semibold">Material</th>
+              <th className="px-4 py-3 font-semibold">Supplier</th>
+              <th className="px-4 py-3 font-semibold text-right">Shortage</th>
+              <th className="px-4 py-3 font-semibold text-right">Requested</th>
+              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold">Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {procurementRequests.length ? procurementRequests.map((request) => (
+              <tr key={request.id} className="data-table-row">
+                <td className="px-4 py-3 font-mono-num text-xs font-semibold text-primary">{request.sku}</td>
+                <td className="px-4 py-3 font-medium">{request.material}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground">{request.supplier}</td>
+                <td className="px-4 py-3 text-right font-mono-num text-warning">{fmt(request.shortageQty)}</td>
+                <td className="px-4 py-3 text-right font-mono-num">{fmt(request.requestedQty)}</td>
+                <td className="px-4 py-3 text-xs">{request.status}</td>
+                <td className="px-4 py-3 font-mono-num text-xs text-muted-foreground">{request.createdAt}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No procurement requests created yet.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -190,6 +326,87 @@ export default function Inventory() {
                 </Button>
                 <Button type="submit" disabled={adjustmentMutation.isPending}>
                   {adjustmentMutation.isPending ? "Saving..." : "Save Adjustment"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(procurementTarget)} onOpenChange={(open) => {
+        if (!open) {
+          setProcurementTarget(null);
+          setEditingProcurement(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingProcurement ? "Update Procurement Request" : "Create Procurement Request"}</DialogTitle>
+            <DialogDescription>
+              {procurementTarget ? `Track shortage action for ${procurementTarget.name}.` : "Track shortage action."}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...procurementForm}>
+            <form onSubmit={procurementForm.handleSubmit((values) => procurementMutation.mutate(values))} className="space-y-4">
+              <FormField
+                control={procurementForm.control}
+                name="requestedQty"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Requested Qty</FormLabel>
+                    <FormControl>
+                      <Input type="number" {...field} />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={procurementForm.control}
+                name="note"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Reason / Note</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )}
+              />
+              {editingProcurement ? (
+                <FormField
+                  control={procurementForm.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1.5">
+                      <FormLabel className="text-xs font-medium">Status</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="OPEN">Open</SelectItem>
+                          <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                          <SelectItem value="CLOSED">Closed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage className="text-[11px]" />
+                    </FormItem>
+                  )}
+                />
+              ) : null}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => {
+                  setProcurementTarget(null);
+                  setEditingProcurement(null);
+                }}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={procurementMutation.isPending}>
+                  {procurementMutation.isPending ? "Saving..." : editingProcurement ? "Save Request" : "Create Request"}
                 </Button>
               </DialogFooter>
             </form>

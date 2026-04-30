@@ -10,6 +10,7 @@ import type {
   MasterSupplier,
   MasterVendor,
   InventoryPayload,
+  ProcurementRequestsPayload,
   OrderDetailPayload,
   OrderItem,
   OrderOption,
@@ -20,6 +21,7 @@ import type {
   DispatchPayload,
   DashboardPayload,
   MrpPayload,
+  ReportRowsPayload,
   SettingsPayload,
   ReportsPayload,
   VendorDetailPayload,
@@ -358,6 +360,24 @@ export async function createInventoryAdjustment(payload: { sku: string; deltaQty
   });
 }
 
+export async function fetchProcurementRequests() {
+  return api<ProcurementRequestsPayload>("/api/inventory/procurement-requests");
+}
+
+export async function createProcurementRequest(payload: { materialId: string; requestedQty: number; note: string }) {
+  return api<{ item: ProcurementRequestsPayload["items"][number] }>("/api/inventory/procurement-requests", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProcurementRequest(id: string, payload: { requestedQty?: number; note?: string; status: "OPEN" | "IN_PROGRESS" | "CLOSED" }) {
+  return api<{ item: ProcurementRequestsPayload["items"][number] }>(`/api/inventory/procurement-requests/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchQa() {
   return api<QaPayload>("/api/qa");
 }
@@ -409,7 +429,12 @@ export async function createShipment(payload: { orderId: string; dispatchDate: s
   });
 }
 
-export async function updateShipment(id: string, payload: { dispatchDate: string; quantity: number; invoiceNumber?: string }) {
+export async function updateShipment(id: string, payload: {
+  dispatchDate: string;
+  quantity: number;
+  invoiceNumber?: string;
+  status?: "READY" | "SCHEDULED" | "DISPATCHED" | "CANCELLED";
+}) {
   return api<{ item: DispatchPayload["items"][number] }>(`/api/dispatch/shipments/${id}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
@@ -447,6 +472,10 @@ export async function fetchDashboard() {
 
 export async function fetchReports() {
   return api<ReportsPayload>("/api/reports");
+}
+
+export async function fetchReportRows(slug: string) {
+  return api<ReportRowsPayload>(`/api/reports/${slug}`);
 }
 
 export async function fetchMrp() {

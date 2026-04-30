@@ -206,4 +206,42 @@ describe("dispatch route", () => {
     });
     expect(writeAuditLog).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ action: "Updated shipment" }));
   });
+
+  it("marks orders dispatched when shipments fully cover quantity", async () => {
+    const route = (await import("../../server/routes/dispatch.mjs")).default;
+    prisma.purchaseOrder.findUnique
+      .mockResolvedValueOnce({
+        id: "ord-1",
+        poNumber: "PO-1",
+        quantity: 100,
+        deliveredQty: 90,
+        shipments: [],
+        brand: { name: "Brand A" },
+        style: { name: "Style A" },
+      })
+      .mockResolvedValueOnce({
+        id: "ord-1",
+        poNumber: "PO-1",
+        quantity: 100,
+        deliveredQty: 100,
+        dueDate: new Date("2026-05-20T00:00:00.000Z"),
+        status: "DISPATCHED",
+        brand: { name: "Brand A" },
+        style: { name: "Style A" },
+        shipments: [{ id: "ship-9", shipmentNumber: "SHIP-2409", dispatchDate: new Date("2026-05-03T00:00:00.000Z"), quantity: 10, invoiceNumber: "INV-9" }],
+      });
+    prisma.dispatchShipment.findFirst.mockResolvedValue({ shipmentNumber: "SHIP-2408" });
+    prisma.dispatchShipment.create.mockResolvedValue({});
+    prisma.purchaseOrder.update.mockResolvedValue({});
+
+    const { res } = await invokeRoute(route, "post", "/shipments", {
+      body: { orderId: "ord-1", dispatchDate: "2026-05-03", quantity: 10, invoiceNumber: "INV-9" },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(prisma.purchaseOrder.update).toHaveBeenCalledWith({
+      where: { id: "ord-1" },
+      data: { deliveredQty: 100, status: "DISPATCHED" },
+    });
+  });
 });

@@ -268,6 +268,7 @@ export type VendorDetailPayload = {
 
 export type InventoryItem = {
   id: string;
+  materialId: string;
   name: string;
   type: string;
   uom: string;
@@ -275,11 +276,31 @@ export type InventoryItem = {
   min: number;
   allocated: number;
   supplier: string;
+  shortage: number;
+  activeProcurementRequest?: ProcurementRequestItem | null;
 };
 
 export type InventoryPayload = {
   items: InventoryItem[];
   lowStockCount: number;
+};
+
+export type ProcurementRequestItem = {
+  id: string;
+  materialId: string;
+  sku: string;
+  material: string;
+  supplier: string;
+  shortageQty: number;
+  requestedQty: number;
+  note: string;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+};
+
+export type ProcurementRequestsPayload = {
+  items: ProcurementRequestItem[];
 };
 
 export type QaPayload = {
@@ -328,6 +349,7 @@ export type DispatchItem = {
   styleName: string;
   qty: number;
   dispatched: number;
+  remaining: number;
   due: string;
   status: string;
   latestShipment?: {
@@ -335,7 +357,15 @@ export type DispatchItem = {
     dispatchDate: string;
     quantity: number;
     invoiceNumber?: string | null;
+    status: string;
   } | null;
+  shipments?: Array<{
+    id: string;
+    dispatchDate: string;
+    quantity: number;
+    invoiceNumber?: string | null;
+    status: string;
+  }>;
 };
 
 export type DispatchPayload = {
@@ -401,11 +431,21 @@ export type DashboardPayload = {
 
 export type ReportsPayload = {
   items: Array<{
+    slug: string;
     name: string;
     desc: string;
     category: string;
     rows: number;
+    downloadUrl: string;
+    pdfUrl: string;
   }>;
+};
+
+export type ReportRowsPayload = {
+  slug: string;
+  name: string;
+  category: string;
+  rows: Array<Record<string, string | number | boolean | null>>;
 };
 
 export type MrpPayload = {
@@ -417,5 +457,11 @@ export type MrpPayload = {
     required: number;
     free: number;
     shortage: number;
+    activeProcurementRequest?: {
+      id: string;
+      status: string;
+      requestedQty: number;
+      note: string;
+    } | null;
   }>;
 };

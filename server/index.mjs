@@ -5,6 +5,7 @@ import { prisma } from "./db.mjs";
 import { getEnv } from "./env.mjs";
 import { findSessionUser, getSessionCookieName, serializeUser } from "./auth.mjs";
 import { ApiError, fail } from "./http.mjs";
+import { logError, logInfo, requestLogger } from "./logger.mjs";
 import authRoutes from "./routes/auth.mjs";
 import dispatchRoutes from "./routes/dispatch.mjs";
 import dashboardRoutes from "./routes/dashboard.mjs";
@@ -22,13 +23,24 @@ import vendorsRoutes from "./routes/vendors.mjs";
 const app = express();
 const env = getEnv();
 const port = env.API_PORT;
+const allowedOrigins = env.CORS_ALLOWED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean);
+
+if (env.TRUST_PROXY) {
+  app.set("trust proxy", 1);
+}
 
 app.use(
   cors({
-    origin: true,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    },
     credentials: true,
   }),
 );
+app.use(requestLogger);
 app.use(express.json());
 app.use(cookieParser());
 
@@ -39,7 +51,8 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/health/db", async (_req, res, next) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ ok: true, db: "up" });
+    const migrationCount = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM "_prisma_migrations"`);
+    res.json({ ok: true, db: "up", migrations: migrationCount?.[0]?.count ?? null });
   } catch (error) {
     next(error);
   }
@@ -97,7 +110,11 @@ app.use("/api/reports", reportsRoutes);
 app.use("/api/mrp", mrpRoutes);
 
 app.use((error, _req, res, _next) => {
-  console.error(error);
+  logError("request.error", error, {
+    method: _req?.method,
+    path: _req?.path,
+    durationMs: _req?.requestStartedAt ? Date.now() - _req.requestStartedAt : null,
+  });
   if (error instanceof ApiError) {
     return fail(res, error.status, error.message, error.code, error.details);
   }
@@ -108,5 +125,5 @@ app.use((error, _req, res, _next) => {
 });
 
 app.listen(port, () => {
-  console.log(`API listening on http://127.0.0.1:${port}`);
+  logInfo("server.started", { port, origin: env.APP_ORIGIN, env: env.NODE_ENV });
 });

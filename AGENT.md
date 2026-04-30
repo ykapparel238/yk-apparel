@@ -58,9 +58,12 @@ Status values:
   - health and DB readiness endpoints added
   - shared server error contract and role-policy layer added
   - initial automated tests added for client/server contract helpers
+  - auth login now has rate limiting
+  - request and error logging added for server operations
+  - env validation now covers app origin, CORS, proxy trust, session TTL, and auth throttling config
+  - route-level auth tests now cover login, logout, and active session flows
 - Left:
-  - deeper auth/session smoke coverage
-  - migration/setup hardening cleanup
+  - no major gaps in current MVP scope; continue verifying in live deploys
 
 ### 2. Master Data
 - Status: `partially_done`
@@ -114,7 +117,7 @@ Status values:
   - business-rule tests added for planning date window calculations
   - route-level tests now cover quantity guardrails and create-plan audit/status transitions
 - Left:
-  - broader calendar/production-side regression coverage
+  - no major gaps in current MVP scope; continue with live deploy verification
 
 ### 5. Vendor Management
 - Status: `partially_done`
@@ -124,8 +127,9 @@ Status values:
   - vendor detail page wired to challans and weekly metrics
   - issue challan flow added on the vendor detail screen
   - challan inward/rejection update flow added
+  - route-level tests now cover challan totals validation and closed-state update flow
 - Left:
-  - tests
+  - broader vendor lifecycle coverage
 
 ### 6. Inventory and Procurement
 - Status: `partially_done`
@@ -134,9 +138,12 @@ Status values:
   - `/api/inventory` route added
   - Inventory page switched from mock stock/material data to DB-backed materials
   - stock adjustment workflow added with validation and audit logging
+  - route-level tests now cover negative/allocated stock guards and successful stock adjustment writes
+  - shortage-driven procurement requests are now supported with create/update APIs and audit logs
+  - Inventory screen now shows shortage and procurement request state in the existing table layout
+  - procurement request list is now visible in Inventory using the existing table/card patterns
 - Left:
-  - tests
-  - procurement action flows
+  - broader supplier purchasing workflows beyond request tracking
 
 ### 7. QA
 - Status: `partially_done`
@@ -161,8 +168,9 @@ Status values:
   - dispatch writes now use role checks, error codes, and audit logs
   - shipment edit flow added in the existing dispatch dialog
   - route-level tests now cover status filtering, invalid dates, over-dispatch rejection, create flow, and shipment update recalculation
+  - dispatch route tests now cover full-delivery transition to `DISPATCHED`
 - Left:
-  - richer shipment lifecycle handling
+  - richer shipment lifecycle handling beyond the current correction model
 
 ### 9. Settings
 - Status: `partially_done`
@@ -174,6 +182,7 @@ Status values:
   - settings writes now audited and role-restricted
   - settings forms now disable controls while save mutations are pending
   - route-level tests now cover department validation, shift not-found handling, user reference validation, user update audit logging, and admin-only write protection
+  - settings read-model tests now cover persisted list payload shape
 - Left:
   - broader admin coverage
 
@@ -183,9 +192,11 @@ Status values:
 - Done:
   - `/api/dashboard` route added
   - Dashboard page switched from mock KPI/chart/table data to DB-backed summaries
+  - dashboard payload now reads through centralized reporting logic instead of separate ad hoc route aggregation
+  - dashboard route regression coverage added
+  - exact dashboard KPI reconciliation tests now assert deterministic seeded-style totals
 - Left:
-  - tests
-  - stricter use of reporting views only in every metric path
+  - continue moving remaining metrics toward reporting-view-only sources where beneficial
 
 ### 11. Reports
 - Status: `partially_done`
@@ -193,9 +204,12 @@ Status values:
 - Done:
   - `/api/reports` route added
   - Reports page switched from static cards to DB-backed report availability counts
+  - real report detail endpoints and CSV export endpoints added
+  - MRP shortage visibility is now surfaced inside the Reports screen
+  - report-side MRP rows now reflect active procurement request state
+  - route-level tests now cover report summary, detail, and CSV export flows
 - Left:
-  - tests
-  - real export/download generation
+  - PDF export if needed later
 
 ### 12. MRP MVP
 - Status: `partially_done`
@@ -203,9 +217,11 @@ Status values:
 - Done:
   - `/api/mrp` route added
   - BOM vs free-stock shortage calculation exposed for later dashboard/report use
+  - MRP shortage data is now visible in the Reports UI
+  - dedicated MRP calculation tests added
+  - MRP rows now expose active procurement request state so shortages can be actioned safely
 - Left:
-  - tests
-  - UI surface for MRP results
+  - deeper reconciliation coverage
 
 ### 13. Forecasting / Wastage / Risk
 - Status: `post_mvp`

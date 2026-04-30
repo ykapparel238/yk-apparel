@@ -1,39 +1,35 @@
 import { Router } from "express";
-import { prisma } from "../db.mjs";
+import { asyncHandler, fail, ok } from "../http.mjs";
+import { getReportRows, getReportSummaries, toCsv } from "../reporting.mjs";
 
 const router = Router();
 
-router.get("/", async (_req, res) => {
-  const [
-    stageMetrics,
-    orders,
-    lineMetrics,
-    vendors,
-    materials,
-    defects,
-    shipments,
-  ] = await Promise.all([
-    prisma.stageDailyMetric.count(),
-    prisma.purchaseOrder.count(),
-    prisma.lineDailyMetric.count(),
-    prisma.vendorWeeklyMetric.count(),
-    prisma.material.count(),
-    prisma.qaInspection.count(),
-    prisma.dispatchShipment.count(),
-  ]);
+router.get("/", asyncHandler(async (_req, res) => {
+  return ok(res, await getReportSummaries());
+}));
 
-  return res.json({
-    items: [
-      { name: "Daily Production Report", desc: "Stage-wise output, efficiency, rejection by line", category: "Production", rows: stageMetrics },
-      { name: "Order Status Report", desc: "PO lifecycle, delays, dispatch readiness", category: "Merchandising", rows: orders },
-      { name: "Line Performance", desc: "Efficiency, output, downtime per knitting line", category: "Production", rows: lineMetrics },
-      { name: "Vendor Performance Scorecard", desc: "OTD, quality, capacity utilization", category: "Vendor", rows: vendors },
-      { name: "Stock Report", desc: "Yarn, trims, packing — current and aged inventory", category: "Stores", rows: materials },
-      { name: "Rejection & Rework Report", desc: "Defect analysis, root cause, vendor breakdown", category: "QA", rows: defects },
-      { name: "Dispatch Report", desc: "Shipment status, OTIF, brand-wise delivery", category: "Logistics", rows: shipments },
-      { name: "Management Summary", desc: "Executive KPIs across all departments", category: "Executive", rows: 1 },
-    ],
+router.get("/:slug", asyncHandler(async (req, res) => {
+  const payload = await getReportRows(req.params.slug);
+  if (!payload) {
+    return fail(res, 404, "Report not found", "REPORT_NOT_FOUND");
+  }
+  return ok(res, {
+    slug: payload.report.slug,
+    name: payload.report.name,
+    category: payload.report.category,
+    rows: payload.rows,
   });
-});
+}));
+
+router.get("/:slug.csv", asyncHandler(async (req, res) => {
+  const payload = await getReportRows(req.params.slug);
+  if (!payload) {
+    return fail(res, 404, "Report not found", "REPORT_NOT_FOUND");
+  }
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${payload.report.slug}.csv"`);
+  return res.status(200).send(toCsv(payload.rows));
+}));
 
 export default router;

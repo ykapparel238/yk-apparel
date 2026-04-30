@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.mjs";
 import { writeAuditLog } from "../audit.mjs";
 import { fail, ok, requireRoles, asyncHandler } from "../http.mjs";
+import { ACTIVE_ORDER_STATUSES } from "../constants.mjs";
 
 const router = Router();
 
@@ -64,7 +65,7 @@ async function buildQaPayload() {
       include: { defectType: true },
     }),
     prisma.purchaseOrder.findMany({
-      where: { status: { in: ["CREATED", "PLANNED", "IN_PRODUCTION", "QA", "READY_TO_DISPATCH", "DELAYED"] } },
+      where: { status: { in: ACTIVE_ORDER_STATUSES } },
       orderBy: { poNumber: "asc" },
       select: { id: true, poNumber: true },
     }),

@@ -1,5 +1,7 @@
 import "@testing-library/jest-dom";
 
+process.env.DATABASE_URL ||= "postgresql://postgres:postgres@localhost:5432/knitcraft_mes?schema=public";
+
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: (query: string) => ({
@@ -12,4 +14,9 @@ Object.defineProperty(window, "matchMedia", {
     removeEventListener: () => {},
     dispatchEvent: () => {},
   }),
+});
+
+Object.defineProperty(window, "open", {
+  writable: true,
+  value: () => null,
 });

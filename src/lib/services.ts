@@ -1,4 +1,13 @@
 import { api } from "@/lib/api";
+import {
+  createOrderFromRepository,
+  deleteOrderFromRepository,
+  fetchOrderDetailFromRepository,
+  fetchOrderOptionsFromRepository,
+  fetchOrdersFromRepository,
+  type OrdersFilters,
+  updateOrderFromRepository,
+} from "@/lib/ordersRepository";
 import type {
   CalendarPayload,
   MasterBrand,
@@ -12,8 +21,6 @@ import type {
   InventoryPayload,
   ProcurementRequestsPayload,
   OrderDetailPayload,
-  OrderItem,
-  OrderOption,
   PlanningBoardPayload,
   ProductionLine,
   ProductionStage,
@@ -28,28 +35,12 @@ import type {
   VendorListItem,
 } from "@/lib/types";
 
-export type OrdersFilters = {
-  q?: string;
-  status?: string;
-  brandId?: string;
-  styleId?: string;
-};
-
 export async function fetchOrders(filters: OrdersFilters) {
-  const params = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-
-  const query = params.toString();
-  return api<{ items: OrderItem[] }>(`/api/orders${query ? `?${query}` : ""}`);
+  return fetchOrdersFromRepository(filters);
 }
 
 export async function fetchOrderOptions() {
-  return api<{
-    brands: OrderOption[];
-    styles: OrderOption[];
-  }>("/api/orders/options");
+  return fetchOrderOptionsFromRepository();
 }
 
 export async function createOrder(payload: {
@@ -64,10 +55,7 @@ export async function createOrder(payload: {
   sizeAllocations?: Array<{ sizeLabel: string; percent: number }>;
   colorAllocations?: Array<{ colorName: string; hexCode?: string | null; percent: number }>;
 }) {
-  return api<{ item: OrderItem }>("/api/orders", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return createOrderFromRepository(payload);
 }
 
 export async function updateOrder(id: string, payload: {
@@ -82,18 +70,15 @@ export async function updateOrder(id: string, payload: {
   sizeAllocations?: Array<{ sizeLabel: string; percent: number }>;
   colorAllocations?: Array<{ colorName: string; hexCode?: string | null; percent: number }>;
 }) {
-  return api<{ item: OrderItem }>(`/api/orders/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  return updateOrderFromRepository(id, payload);
 }
 
 export async function deleteOrder(id: string) {
-  return api<void>(`/api/orders/${id}`, { method: "DELETE" });
+  return deleteOrderFromRepository(id);
 }
 
 export async function fetchOrderDetail(id: string) {
-  return api<OrderDetailPayload>(`/api/orders/${id}`);
+  return fetchOrderDetailFromRepository(id);
 }
 
 export async function fetchPlanningBoard() {

@@ -32,6 +32,7 @@ export type OrderItem = {
   status: string;
   priority: string;
   progress: number;
+  syncState?: "synced" | "pending" | "conflict";
 };
 
 export type OrderOption = {
@@ -278,6 +279,7 @@ export type InventoryItem = {
   supplier: string;
   shortage: number;
   activeProcurementRequest?: ProcurementRequestItem | null;
+  syncState?: "synced" | "pending" | "conflict";
 };
 
 export type InventoryPayload = {
@@ -297,6 +299,7 @@ export type ProcurementRequestItem = {
   status: string;
   createdBy: string;
   createdAt: string;
+  syncState?: "synced" | "pending" | "conflict";
 };
 
 export type ProcurementRequestsPayload = {
@@ -336,6 +339,7 @@ export type QaPayload = {
     rejectedQty: number;
     reworkQty: number;
     defects: Array<{ defectTypeId: string; defectTypeName: string; count: number }>;
+    syncState?: "synced" | "pending" | "conflict";
   }>;
   orderOptions: Array<{ id: string; poNumber: string }>;
   lineOptions: Array<{ id: string; name: string }>;
@@ -358,6 +362,7 @@ export type DispatchItem = {
     quantity: number;
     invoiceNumber?: string | null;
     status: string;
+    syncState?: "synced" | "pending" | "conflict";
   } | null;
   shipments?: Array<{
     id: string;
@@ -365,7 +370,9 @@ export type DispatchItem = {
     quantity: number;
     invoiceNumber?: string | null;
     status: string;
+    syncState?: "synced" | "pending" | "conflict";
   }>;
+  syncState?: "synced" | "pending" | "conflict";
 };
 
 export type DispatchPayload = {
@@ -405,6 +412,15 @@ export type SettingsPayload = {
     action: string;
     target: string;
     module: string;
+  }>;
+  desktopDevices?: Array<{
+    id: string;
+    clientVersion: string;
+    workspaceId: string;
+    status: string;
+    rebuildRequired: boolean;
+    lastSeenAt: string;
+    conflicts: number;
   }>;
 };
 
@@ -465,3 +481,147 @@ export type MrpPayload = {
     } | null;
   }>;
 };
+
+export type CheckpointStatus = "ok" | "unknown_checkpoint" | "expired_checkpoint" | "rebuild_required";
+
+export type RebuildState = {
+  required: boolean;
+  reason?: string | null;
+};
+
+export type DesktopClientInfo = {
+  deviceId: string;
+  clientVersion: string;
+  workspaceId: string;
+};
+
+export type OutboxMutation = {
+  mutationId: string;
+  bundleId: string;
+  deviceId: string;
+  workspaceId: string;
+  entityType: string;
+  entityId: string;
+  operationType: string;
+  payload: unknown;
+  baseVersion?: string | null;
+  createdAt: string;
+};
+
+export type SyncBundle = {
+  bundleId: string;
+  deviceId: string;
+  workspaceId: string;
+  entityType: string;
+  entityId: string;
+  operationType: string;
+  createdAt: string;
+  mutations: OutboxMutation[];
+};
+
+export type MutationResult = {
+  mutationId: string;
+  status: "synced" | "conflict" | "failed" | "skipped";
+  code?: string;
+  message?: string;
+};
+
+export type BundleResult = {
+  bundleId: string;
+  status: "synced" | "conflict" | "failed" | "skipped";
+  code?: string;
+  message?: string;
+  mutationResults: MutationResult[];
+};
+
+export type ConflictRecord = {
+  id: string;
+  deviceId: string;
+  bundleId: string;
+  mutationId: string;
+  entityType: string;
+  entityId: string;
+  conflictType: string;
+  summary: string;
+  localSnapshot: unknown;
+  serverSnapshot: unknown;
+  chosenAction?: string | null;
+  rationale?: string | null;
+  createdAt: string;
+};
+
+export type DiagnosticsSnapshot = {
+  deviceId: string;
+  checkpointId: string | null;
+  rebuildRequired: boolean;
+  pendingBundles: number;
+  failedBundles: number;
+  syncedBundles: number;
+  deadLetters: number;
+  conflictCount: number;
+  oldestPendingBundleAgeMinutes: number | null;
+  lastSyncAt: string | null;
+  lastSyncError?: string | null;
+  recentRuns: Array<{
+    id: string;
+    status: string;
+    startedAt: string;
+    finishedAt?: string | null;
+    message?: string | null;
+  }>;
+  conflicts: ConflictRecord[];
+  deadLetterItems: Array<{
+    bundleId: string;
+    entityType: string;
+    entityId: string;
+    reason: string;
+    createdAt: string;
+  }>;
+};
+
+export type PushBundlesRequest = {
+  bundles: SyncBundle[];
+};
+
+export type PushBundlesResponse = {
+  results: BundleResult[];
+};
+
+export type PullSyncRequest = {
+  checkpointId?: string | null;
+  scope?: string[];
+};
+
+export type PullSyncResponse = {
+  checkpointStatus: CheckpointStatus;
+  checkpointId: string | null;
+  entitlement: {
+    state: "valid" | "valid_but_recheck_due" | "grace" | "restricted" | "locked";
+  };
+  rebuildState: RebuildState;
+  snapshots?: Partial<Record<string, unknown>>;
+};
+
+export type OutdatedClientResponse = {
+  code: "CLIENT_TOO_OLD";
+  message: string;
+  minimumVersion: string;
+  currentVersion: string;
+};
+
+export type DesktopSyncStatus = {
+  isDesktop: boolean;
+  online: boolean;
+  state: "idle" | "syncing" | "offline" | "error" | "rebuild_required";
+  accessState?: "valid" | "valid_but_recheck_due" | "grace" | "restricted" | "locked";
+  pendingBundles: number;
+  failedBundles: number;
+  conflictCount: number;
+  deadLetters: number;
+  lastSyncAt: string | null;
+  lastSyncError?: string | null;
+  rebuildRequired: boolean;
+  deviceId?: string;
+};
+
+export type ConflictResolutionChoice = "keep_local" | "keep_server" | "dismiss";

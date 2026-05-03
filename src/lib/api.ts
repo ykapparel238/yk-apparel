@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "@/lib/desktopBridge";
+
 export class ApiError extends Error {
   status: number;
   code?: string;
@@ -13,7 +15,11 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
+  const normalizedInput = input.startsWith("/api") && getApiBaseUrl()
+    ? `${getApiBaseUrl()}${input}`
+    : input;
+
+  const response = await fetch(normalizedInput, {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",

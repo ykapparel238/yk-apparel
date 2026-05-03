@@ -12,9 +12,12 @@ import { useRole } from "@/context/RoleContext";
 import { roles, type Role } from "@/lib/auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { DesktopSyncPanel } from "./DesktopSyncPanel";
+import { useDesktopSync } from "@/context/DesktopSyncContext";
 
 export function AppHeader() {
   const { role, setRole, user } = useRole();
+  const { status } = useDesktopSync();
   const initials = user
     ? user.name
         .split(" ")
@@ -36,10 +39,22 @@ export function AppHeader() {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <div className="hidden lg:flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-          Live • Shift A
+        <div className="hidden lg:flex items-center gap-2 text-xs">
+          <span className={`h-1.5 w-1.5 rounded-full ${status.state === "offline" ? "bg-warning" : status.state === "error" || status.failedBundles ? "bg-destructive" : "bg-success"} ${status.state === "syncing" ? "animate-pulse" : ""}`} />
+          <span className="text-muted-foreground">
+            {status.isDesktop
+              ? status.state === "syncing"
+                ? `Syncing • ${status.pendingBundles} pending`
+                : status.state === "offline"
+                  ? `Offline • ${status.pendingBundles} pending`
+                  : status.failedBundles || status.conflictCount
+                    ? `Needs attention • ${status.failedBundles + status.conflictCount}`
+                    : "Desktop Ready"
+              : "Live • Shift A"}
+          </span>
         </div>
+
+        <DesktopSyncPanel />
 
         <Select value={role ?? undefined} onValueChange={(v) => setRole(v as Role)}>
           <SelectTrigger className="h-9 w-[200px] text-xs">

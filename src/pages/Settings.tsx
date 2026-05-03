@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { fetchSettings, updateDepartment, updateSettingsUser, updateShift } from "@/lib/services";
+import { fetchSettings, updateDepartment, updateDesktopDevice, updateSettingsUser, updateShift } from "@/lib/services";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,11 +50,16 @@ const userSchema = z.object({
   departmentCode: z.string().optional(),
   shiftCode: z.string().optional(),
 });
+const desktopDeviceSchema = z.object({
+  status: z.enum(["ACTIVE", "RESTRICTED", "LOCKED", "REVOKED"]),
+  rebuildRequired: z.boolean().default(false),
+});
 
 type EditorState =
   | { kind: "department"; item: { id: string; name: string; head: string; staff: number; lines: number } }
   | { kind: "shift"; item: { id: string; name: string; supervisor: string; headcount: number } }
   | { kind: "user"; item: { id: string; name: string; role: string; status: string; departmentCode?: string | null; shiftCode?: string | null } }
+  | { kind: "desktopDevice"; item: { id: string; clientVersion: string; workspaceId: string; status: string; rebuildRequired: boolean; lastSeenAt: string; conflicts: number } }
   | null;
 
 const roleOptions = [
@@ -88,6 +93,10 @@ export default function Settings() {
   const userForm = useForm<z.infer<typeof userSchema>>({
     resolver: zodResolver(userSchema),
     defaultValues: { role: "", status: "ACTIVE", departmentCode: "", shiftCode: "" },
+  });
+  const desktopDeviceForm = useForm<z.infer<typeof desktopDeviceSchema>>({
+    resolver: zodResolver(desktopDeviceSchema),
+    defaultValues: { status: "ACTIVE", rebuildRequired: false },
   });
 
   const refresh = async () => {
@@ -127,6 +136,15 @@ export default function Settings() {
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to update user"),
   });
+  const desktopDeviceMutation = useMutation({
+    mutationFn: (values: z.infer<typeof desktopDeviceSchema>) => updateDesktopDevice((editor as { item: { id: string } }).item.id, values),
+    onSuccess: async () => {
+      toast.success("Desktop device updated");
+      setEditor(null);
+      await refresh();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to update desktop device"),
+  });
 
   if (settingsQuery.isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground">Loading settings...</div>;
@@ -145,12 +163,17 @@ export default function Settings() {
       departmentForm.reset({ head: next.item.head, staff: next.item.staff, lines: next.item.lines });
     } else if (next.kind === "shift") {
       shiftForm.reset({ supervisor: next.item.supervisor, headcount: next.item.headcount });
-    } else {
+    } else if (next.kind === "user") {
       userForm.reset({
         role: roleOptions.find((role) => role === next.item.role.replaceAll(" ", "_").toUpperCase()) ?? "MERCHANDISER",
         status: next.item.status === "Active" ? "ACTIVE" : "INACTIVE",
         departmentCode: next.item.departmentCode ?? "",
         shiftCode: next.item.shiftCode ?? "",
+      });
+    } else {
+      desktopDeviceForm.reset({
+        status: next.item.status as "ACTIVE" | "RESTRICTED" | "LOCKED" | "REVOKED",
+        rebuildRequired: next.item.rebuildRequired,
       });
     }
   };
@@ -173,6 +196,7 @@ export default function Settings() {
           <TabsTrigger value="departments">Departments</TabsTrigger>
           <TabsTrigger value="shifts">Shifts</TabsTrigger>
           <TabsTrigger value="users">Users & Roles</TabsTrigger>
+          <TabsTrigger value="desktop">Desktop Devices</TabsTrigger>
           <TabsTrigger value="audit">Audit Log</TabsTrigger>
         </TabsList>
 
@@ -275,6 +299,53 @@ export default function Settings() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="desktop">
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="p-4 border-b border-border flex items-center gap-2 text-xs text-muted-foreground">
+              <Shield className="h-3.5 w-3.5" /> Desktop device trust, access state, and rebuild controls
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr className="text-left">
+                  <th className="px-4 py-3 font-semibold">Device ID</th>
+                  <th className="px-4 py-3 font-semibold">Client</th>
+                  <th className="px-4 py-3 font-semibold">Workspace</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Rebuild</th>
+                  <th className="px-4 py-3 font-semibold text-right">Conflicts</th>
+                  <th className="px-4 py-3 font-semibold">Last Seen</th>
+                  <th className="px-4 py-3 font-semibold w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(settingsQuery.data.desktopDevices ?? []).map((device) => (
+                  <tr key={device.id} className="data-table-row">
+                    <td className="px-4 py-3 font-mono-num text-[11px]">{device.id.slice(0, 12)}...</td>
+                    <td className="px-4 py-3">{device.clientVersion}</td>
+                    <td className="px-4 py-3">{device.workspaceId}</td>
+                    <td className="px-4 py-3"><StatusBadge status={device.status} /></td>
+                    <td className="px-4 py-3">{device.rebuildRequired ? "Required" : "No"}</td>
+                    <td className="px-4 py-3 text-right font-mono-num">{device.conflicts}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{device.lastSeenAt}</td>
+                    <td className="px-2 py-3 text-right">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditor({ kind: "desktopDevice", item: device })}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {!(settingsQuery.data.desktopDevices ?? []).length ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      No desktop devices registered yet.
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>
@@ -394,6 +465,43 @@ export default function Settings() {
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancel</Button>
                   <Button type="submit" disabled={userMutation.isPending}>{userMutation.isPending ? "Saving..." : "Save Changes"}</Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          ) : editor?.kind === "desktopDevice" ? (
+            <Form {...desktopDeviceForm}>
+              <form onSubmit={desktopDeviceForm.handleSubmit((values) => desktopDeviceMutation.mutate(values))} className="space-y-4">
+                <FormField control={desktopDeviceForm.control} name="status" render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Access State</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={desktopDeviceMutation.isPending}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                        <SelectItem value="RESTRICTED">RESTRICTED</SelectItem>
+                        <SelectItem value="LOCKED">LOCKED</SelectItem>
+                        <SelectItem value="REVOKED">REVOKED</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+                <FormField control={desktopDeviceForm.control} name="rebuildRequired" render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Rebuild Required</FormLabel>
+                    <Select value={field.value ? "yes" : "no"} onValueChange={(value) => field.onChange(value === "yes")} disabled={desktopDeviceMutation.isPending}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="no">No</SelectItem>
+                        <SelectItem value="yes">Yes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancel</Button>
+                  <Button type="submit" disabled={desktopDeviceMutation.isPending}>{desktopDeviceMutation.isPending ? "Saving..." : "Save Changes"}</Button>
                 </DialogFooter>
               </form>
             </Form>

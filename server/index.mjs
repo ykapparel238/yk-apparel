@@ -18,12 +18,28 @@ import productionRoutes from "./routes/production.mjs";
 import qaRoutes from "./routes/qa.mjs";
 import reportsRoutes from "./routes/reports.mjs";
 import settingsRoutes from "./routes/settings.mjs";
+import syncRoutes from "./routes/sync.mjs";
 import vendorsRoutes from "./routes/vendors.mjs";
 
 const app = express();
 const env = getEnv();
 const port = env.API_PORT;
-const allowedOrigins = env.CORS_ALLOWED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean);
+const configuredOrigins = env.CORS_ALLOWED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean);
+const allowedOrigins = new Set(configuredOrigins);
+
+for (const origin of configuredOrigins) {
+  try {
+    const url = new URL(origin);
+    if (url.hostname === "localhost") {
+      allowedOrigins.add(`${url.protocol}//127.0.0.1${url.port ? `:${url.port}` : ""}`);
+    }
+    if (url.hostname === "127.0.0.1") {
+      allowedOrigins.add(`${url.protocol}//localhost${url.port ? `:${url.port}` : ""}`);
+    }
+  } catch {
+    // Keep existing configured origin behavior for non-URL entries.
+  }
+}
 
 if (env.TRUST_PROXY) {
   app.set("trust proxy", 1);
@@ -32,7 +48,7 @@ if (env.TRUST_PROXY) {
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.has(origin)) {
         return callback(null, true);
       }
       return callback(new Error(`Origin ${origin} is not allowed by CORS`));
@@ -108,6 +124,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/mrp", mrpRoutes);
+app.use("/api/sync", syncRoutes);
 
 app.use((error, _req, res, _next) => {
   logError("request.error", error, {

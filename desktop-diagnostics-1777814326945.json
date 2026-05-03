@@ -1,0 +1,213 @@
+{
+  "ok": true,
+  "dbPath": "/Users/muhammadmudassar/Library/Application Support/Electron/offline-knitcraft.db",
+  "deviceId": "ede7b5ad-c711-4c94-ad7d-1749f8319dd3",
+  "checkpointId": "cb53f0ee-5127-49d1-9bee-a633abb8b8ce",
+  "accessState": "valid",
+  "rebuildRequired": false,
+  "bundleCounts": {},
+  "mutationCounts": {},
+  "conflictCount": 0,
+  "deadLetterCount": 0,
+  "oldestPendingBundleAgeMinutes": null,
+  "recentRuns": [
+    {
+      "id": "3aefa203-66eb-4ef0-8d59-02b34aab96ea",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:17:25.241Z",
+      "finishedAt": "2026-05-03T13:17:25.283Z",
+      "message": null
+    },
+    {
+      "id": "c40bc15d-fbdc-4e4d-b7c2-c66fa317d0eb",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:15:25.245Z",
+      "finishedAt": "2026-05-03T13:15:25.292Z",
+      "message": null
+    },
+    {
+      "id": "05e78a35-d21c-4288-ba92-bd382556e70d",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:13:25.248Z",
+      "finishedAt": "2026-05-03T13:13:25.330Z",
+      "message": null
+    },
+    {
+      "id": "66447ce9-66dc-4f75-8f41-acda5a072d2b",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:11:25.252Z",
+      "finishedAt": "2026-05-03T13:11:25.290Z",
+      "message": null
+    },
+    {
+      "id": "00f748c4-bfab-4e59-9482-179ed6022026",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:09:25.255Z",
+      "finishedAt": "2026-05-03T13:09:25.297Z",
+      "message": null
+    },
+    {
+      "id": "50cdcb52-81bc-4352-b600-dd2c632543d8",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:07:25.259Z",
+      "finishedAt": "2026-05-03T13:07:25.352Z",
+      "message": null
+    },
+    {
+      "id": "159c9b3f-3c9c-40a8-95b3-1fb20681ccc9",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:05:25.262Z",
+      "finishedAt": "2026-05-03T13:05:25.306Z",
+      "message": null
+    },
+    {
+      "id": "262b3bdb-b9f8-45e9-a9eb-2cb221209e9d",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:03:25.315Z",
+      "finishedAt": "2026-05-03T13:03:25.369Z",
+      "message": null
+    },
+    {
+      "id": "b08b72cf-2927-4c58-91f5-2ba11d796c5a",
+      "status": "ok",
+      "startedAt": "2026-05-03T13:01:25.317Z",
+      "finishedAt": "2026-05-03T13:01:25.436Z",
+      "message": null
+    },
+    {
+      "id": "97e5e28a-4481-498e-a5a2-3a3e25a72d38",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:59:25.320Z",
+      "finishedAt": "2026-05-03T12:59:25.383Z",
+      "message": null
+    },
+    {
+      "id": "184fa1f7-1959-46f7-ad23-6fc0d2bfdd19",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:57:26.823Z",
+      "finishedAt": "2026-05-03T12:57:26.880Z",
+      "message": null
+    },
+    {
+      "id": "fe9841d4-4b8f-4af7-a4a5-b7aed02aa603",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:57:11.199Z",
+      "finishedAt": "2026-05-03T12:57:11.246Z",
+      "message": null
+    },
+    {
+      "id": "81427d5c-09f6-425d-a1a0-b5c23e473542",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:55:11.202Z",
+      "finishedAt": "2026-05-03T12:55:11.290Z",
+      "message": null
+    },
+    {
+      "id": "5c56310a-ed31-45f3-8965-3d1915ede68d",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:53:11.205Z",
+      "finishedAt": "2026-05-03T12:53:11.279Z",
+      "message": null
+    },
+    {
+      "id": "982b22af-1ded-4d1b-bfd7-ca6f53317a71",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:51:11.206Z",
+      "finishedAt": "2026-05-03T12:51:11.263Z",
+      "message": null
+    },
+    {
+      "id": "80c1c2bd-a0c1-47a0-8316-73f7ca83cd74",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:49:11.202Z",
+      "finishedAt": "2026-05-03T12:49:11.296Z",
+      "message": null
+    },
+    {
+      "id": "34bfb412-1f7b-4416-abd2-945fe0debe12",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:47:11.184Z",
+      "finishedAt": "2026-05-03T12:47:11.233Z",
+      "message": null
+    },
+    {
+      "id": "9c714f2b-eefb-4581-a4cc-6c891dbc4bf9",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:45:11.186Z",
+      "finishedAt": "2026-05-03T12:45:11.224Z",
+      "message": null
+    },
+    {
+      "id": "57c8c873-ef13-4286-8d21-a3696fb0bc71",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:43:11.189Z",
+      "finishedAt": "2026-05-03T12:43:11.277Z",
+      "message": null
+    },
+    {
+      "id": "dded3b48-02d6-4597-a6e1-70481a570522",
+      "status": "ok",
+      "startedAt": "2026-05-03T12:41:11.193Z",
+      "finishedAt": "2026-05-03T12:41:11.237Z",
+      "message": null
+    }
+  ],
+  "conflicts": [],
+  "deadLetters": [],
+  "snapshots": [
+    {
+      "resourceKey": "dispatch.data",
+      "updatedAt": "2026-05-03T12:37:13.083Z",
+      "payloadSize": 598
+    },
+    {
+      "resourceKey": "inventory.data",
+      "updatedAt": "2026-05-03T12:37:13.082Z",
+      "payloadSize": 1556
+    },
+    {
+      "resourceKey": "inventory.procurementRequests",
+      "updatedAt": "2026-05-03T12:37:13.082Z",
+      "payloadSize": 749
+    },
+    {
+      "resourceKey": "orders.details",
+      "updatedAt": "2026-05-03T12:37:13.082Z",
+      "payloadSize": 3699
+    },
+    {
+      "resourceKey": "orders.list",
+      "updatedAt": "2026-05-03T12:37:13.082Z",
+      "payloadSize": 1563
+    },
+    {
+      "resourceKey": "orders.options",
+      "updatedAt": "2026-05-03T12:37:13.082Z",
+      "payloadSize": 956
+    },
+    {
+      "resourceKey": "planning.board",
+      "updatedAt": "2026-05-03T12:37:13.082Z",
+      "payloadSize": 2531
+    },
+    {
+      "resourceKey": "qa.data",
+      "updatedAt": "2026-05-03T12:37:13.082Z",
+      "payloadSize": 2049
+    }
+  ],
+  "checkpoints": [],
+  "clientState": {
+    "accessState": "valid",
+    "cachedSession": {
+      "id": "cmopqlxku000gojh9h359n97i",
+      "employeeCode": "U001",
+      "name": "Rohit Mehra",
+      "email": "rohit@knitcraft.in",
+      "role": "Admin"
+    },
+    "checkpointId": "cb53f0ee-5127-49d1-9bee-a633abb8b8ce",
+    "deviceId": "ede7b5ad-c711-4c94-ad7d-1749f8319dd3",
+    "rebuildRequired": false
+  }
+}

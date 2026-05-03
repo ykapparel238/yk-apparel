@@ -8,6 +8,12 @@ import {
   type OrdersFilters,
   updateOrderFromRepository,
 } from "@/lib/ordersRepository";
+import {
+  desktopResources,
+  mutateDesktopOrRemote,
+  readDesktopSnapshot,
+  readDesktopOrRemote,
+} from "@/lib/desktopOfflineRepository";
 import type {
   CalendarPayload,
   MasterBrand,
@@ -36,11 +42,20 @@ import type {
 } from "@/lib/types";
 
 export async function fetchOrders(filters: OrdersFilters) {
-  return fetchOrdersFromRepository(filters);
+  return readDesktopOrRemote(
+    desktopResources.ordersList,
+    () => fetchOrdersFromRepository(filters),
+    (payload) => ({ [desktopResources.ordersList]: payload }),
+    filters,
+  );
 }
 
 export async function fetchOrderOptions() {
-  return fetchOrderOptionsFromRepository();
+  return readDesktopOrRemote(
+    desktopResources.ordersOptions,
+    fetchOrderOptionsFromRepository,
+    (payload) => ({ [desktopResources.ordersOptions]: payload }),
+  );
 }
 
 export async function createOrder(payload: {
@@ -55,7 +70,15 @@ export async function createOrder(payload: {
   sizeAllocations?: Array<{ sizeLabel: string; percent: number }>;
   colorAllocations?: Array<{ colorName: string; hexCode?: string | null; percent: number }>;
 }) {
-  return createOrderFromRepository(payload);
+  return mutateDesktopOrRemote(
+    {
+      entityType: "order",
+      entityId: payload.poNumber,
+      operationType: "orders.create",
+      payload,
+    },
+    () => createOrderFromRepository(payload),
+  );
 }
 
 export async function updateOrder(id: string, payload: {
@@ -70,19 +93,52 @@ export async function updateOrder(id: string, payload: {
   sizeAllocations?: Array<{ sizeLabel: string; percent: number }>;
   colorAllocations?: Array<{ colorName: string; hexCode?: string | null; percent: number }>;
 }) {
-  return updateOrderFromRepository(id, payload);
+  const detail = await readDesktopSnapshot<OrderDetailPayload>(desktopResources.orderDetails, { id });
+  return mutateDesktopOrRemote(
+    {
+      entityType: "order",
+      entityId: id,
+      operationType: "orders.update",
+      payload,
+      baseVersion: (detail?.item as OrderItem & { syncVersion?: string } | undefined)?.syncVersion ?? null,
+    },
+    () => updateOrderFromRepository(id, payload),
+  );
 }
 
 export async function deleteOrder(id: string) {
-  return deleteOrderFromRepository(id);
+  const detail = await readDesktopSnapshot<OrderDetailPayload>(desktopResources.orderDetails, { id });
+  return mutateDesktopOrRemote(
+    {
+      entityType: "order",
+      entityId: id,
+      operationType: "orders.delete",
+      payload: { id },
+      baseVersion: (detail?.item as OrderItem & { syncVersion?: string } | undefined)?.syncVersion ?? null,
+    },
+    () => deleteOrderFromRepository(id),
+  );
 }
 
 export async function fetchOrderDetail(id: string) {
-  return fetchOrderDetailFromRepository(id);
+  return readDesktopOrRemote(
+    desktopResources.orderDetails,
+    () => fetchOrderDetailFromRepository(id),
+    (payload) => ({
+      [desktopResources.orderDetails]: {
+        [id]: payload,
+      },
+    }),
+    { id },
+  );
 }
 
 export async function fetchPlanningBoard() {
-  return api<PlanningBoardPayload>("/api/planning/board");
+  return readDesktopOrRemote(
+    desktopResources.planningBoard,
+    () => api<PlanningBoardPayload>("/api/planning/board"),
+    (payload) => ({ [desktopResources.planningBoard]: payload }),
+  );
 }
 
 export async function createPlan(payload: {
@@ -92,10 +148,19 @@ export async function createPlan(payload: {
   endDate: string;
   plannedQty: number;
 }) {
-  return api<{ item: PlanningBoardPayload["allocations"][number] }>("/api/planning/plans", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return mutateDesktopOrRemote(
+    {
+      entityType: "planning",
+      entityId: payload.orderId,
+      operationType: "planning.create",
+      payload,
+      baseVersion: payload.orderId,
+    },
+    () => api<{ item: PlanningBoardPayload["allocations"][number] }>("/api/planning/plans", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function updatePlan(id: string, payload: {
@@ -105,10 +170,21 @@ export async function updatePlan(id: string, payload: {
   endDate: string;
   plannedQty: number;
 }) {
-  return api<{ item: PlanningBoardPayload["allocations"][number] }>(`/api/planning/plans/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  const board = await readDesktopSnapshot<PlanningBoardPayload>(desktopResources.planningBoard);
+  const allocation = board?.allocations.find((item) => item.id === id) as (PlanningBoardPayload["allocations"][number] & { syncVersion?: string }) | undefined;
+  return mutateDesktopOrRemote(
+    {
+      entityType: "planning",
+      entityId: id,
+      operationType: "planning.update",
+      payload,
+      baseVersion: allocation?.syncVersion ?? null,
+    },
+    () => api<{ item: PlanningBoardPayload["allocations"][number] }>(`/api/planning/plans/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function fetchPlanningCalendar(month = "2024-11") {
@@ -335,36 +411,81 @@ export async function updateVendorChallan(
 }
 
 export async function fetchInventory() {
-  return api<InventoryPayload>("/api/inventory");
+  return readDesktopOrRemote(
+    desktopResources.inventory,
+    () => api<InventoryPayload>("/api/inventory"),
+    (payload) => ({ [desktopResources.inventory]: payload }),
+  );
 }
 
 export async function createInventoryAdjustment(payload: { sku: string; deltaQty: number; reason: string }) {
-  return api<{ item: InventoryPayload["items"][number] }>("/api/inventory/adjustments", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const inventory = await readDesktopSnapshot<InventoryPayload>(desktopResources.inventory);
+  const item = inventory?.items.find((entry) => entry.id === payload.sku) as (InventoryPayload["items"][number] & { syncVersion?: string }) | undefined;
+  return mutateDesktopOrRemote(
+    {
+      entityType: "inventory",
+      entityId: payload.sku,
+      operationType: "inventory.adjustment.create",
+      payload,
+      baseVersion: item?.syncVersion ?? null,
+    },
+    () => api<{ item: InventoryPayload["items"][number] }>("/api/inventory/adjustments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function fetchProcurementRequests() {
-  return api<ProcurementRequestsPayload>("/api/inventory/procurement-requests");
+  return readDesktopOrRemote(
+    desktopResources.procurementRequests,
+    () => api<ProcurementRequestsPayload>("/api/inventory/procurement-requests"),
+    (payload) => ({ [desktopResources.procurementRequests]: payload }),
+  );
 }
 
 export async function createProcurementRequest(payload: { materialId: string; requestedQty: number; note: string }) {
-  return api<{ item: ProcurementRequestsPayload["items"][number] }>("/api/inventory/procurement-requests", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const inventory = await readDesktopSnapshot<InventoryPayload>(desktopResources.inventory);
+  const item = inventory?.items.find((entry) => entry.materialId === payload.materialId) as (InventoryPayload["items"][number] & { syncVersion?: string }) | undefined;
+  return mutateDesktopOrRemote(
+    {
+      entityType: "procurement_request",
+      entityId: payload.materialId,
+      operationType: "inventory.procurement.create",
+      payload,
+      baseVersion: item?.syncVersion ?? null,
+    },
+    () => api<{ item: ProcurementRequestsPayload["items"][number] }>("/api/inventory/procurement-requests", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function updateProcurementRequest(id: string, payload: { requestedQty?: number; note?: string; status: "OPEN" | "IN_PROGRESS" | "CLOSED" }) {
-  return api<{ item: ProcurementRequestsPayload["items"][number] }>(`/api/inventory/procurement-requests/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  const requests = await readDesktopSnapshot<ProcurementRequestsPayload>(desktopResources.procurementRequests);
+  const item = requests?.items.find((entry) => entry.id === id) as (ProcurementRequestsPayload["items"][number] & { syncVersion?: string }) | undefined;
+  return mutateDesktopOrRemote(
+    {
+      entityType: "procurement_request",
+      entityId: id,
+      operationType: "inventory.procurement.update",
+      payload,
+      baseVersion: item?.syncVersion ?? null,
+    },
+    () => api<{ item: ProcurementRequestsPayload["items"][number] }>(`/api/inventory/procurement-requests/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function fetchQa() {
-  return api<QaPayload>("/api/qa");
+  return readDesktopOrRemote(
+    desktopResources.qa,
+    () => api<QaPayload>("/api/qa"),
+    (payload) => ({ [desktopResources.qa]: payload }),
+  );
 }
 
 export async function createQaInspection(payload: {
@@ -379,10 +500,19 @@ export async function createQaInspection(payload: {
   reworkQty: number;
   defects: Array<{ defectTypeId: string; count: number }>;
 }) {
-  return api<{ item: { id: string } }>("/api/qa/inspections", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return mutateDesktopOrRemote(
+    {
+      entityType: "qa_inspection",
+      entityId: payload.orderId ?? payload.lineId ?? payload.vendorId ?? "inspection",
+      operationType: "qa.create",
+      payload,
+      baseVersion: payload.orderId ?? payload.lineId ?? payload.vendorId ?? null,
+    },
+    () => api<{ item: { id: string } }>("/api/qa/inspections", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function updateQaInspection(id: string, payload: {
@@ -397,14 +527,29 @@ export async function updateQaInspection(id: string, payload: {
   reworkQty: number;
   defects: Array<{ defectTypeId: string; count: number }>;
 }) {
-  return api<{ item: { id: string } }>(`/api/qa/inspections/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  const qa = await readDesktopSnapshot<QaPayload>(desktopResources.qa);
+  const inspection = qa?.inspections.find((entry) => entry.id === id) as (QaPayload["inspections"][number] & { syncVersion?: string }) | undefined;
+  return mutateDesktopOrRemote(
+    {
+      entityType: "qa_inspection",
+      entityId: id,
+      operationType: "qa.update",
+      payload,
+      baseVersion: inspection?.syncVersion ?? null,
+    },
+    () => api<{ item: { id: string } }>(`/api/qa/inspections/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function fetchDispatch() {
-  return api<DispatchPayload>("/api/dispatch");
+  return readDesktopOrRemote(
+    desktopResources.dispatch,
+    () => api<DispatchPayload>("/api/dispatch"),
+    (payload) => ({ [desktopResources.dispatch]: payload }),
+  );
 }
 
 export async function createShipment(payload: {
@@ -414,10 +559,19 @@ export async function createShipment(payload: {
   invoiceNumber?: string;
   status?: "READY" | "SCHEDULED" | "DISPATCHED" | "CANCELLED";
 }) {
-  return api<{ item: DispatchPayload["items"][number] }>("/api/dispatch/shipments", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return mutateDesktopOrRemote(
+    {
+      entityType: "dispatch_shipment",
+      entityId: payload.orderId,
+      operationType: "dispatch.create",
+      payload,
+      baseVersion: payload.orderId,
+    },
+    () => api<{ item: DispatchPayload["items"][number] }>("/api/dispatch/shipments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function updateShipment(id: string, payload: {
@@ -426,14 +580,32 @@ export async function updateShipment(id: string, payload: {
   invoiceNumber?: string;
   status?: "READY" | "SCHEDULED" | "DISPATCHED" | "CANCELLED";
 }) {
-  return api<{ item: DispatchPayload["items"][number] }>(`/api/dispatch/shipments/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  const dispatch = await readDesktopSnapshot<DispatchPayload>(desktopResources.dispatch);
+  const shipment = dispatch?.items.flatMap((item) => item.shipments ?? []).find((entry) => entry.id === id) as ({ syncVersion?: string } & DispatchPayload["items"][number]["shipments"][number]) | undefined;
+  return mutateDesktopOrRemote(
+    {
+      entityType: "dispatch_shipment",
+      entityId: id,
+      operationType: "dispatch.update",
+      payload,
+      baseVersion: shipment?.syncVersion ?? null,
+    },
+    () => api<{ item: DispatchPayload["items"][number] }>(`/api/dispatch/shipments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function fetchSettings() {
   return api<SettingsPayload>("/api/settings");
+}
+
+export async function updateDesktopDevice(id: string, payload: { status: "ACTIVE" | "RESTRICTED" | "LOCKED" | "REVOKED"; rebuildRequired?: boolean }) {
+  return api<{ item: NonNullable<SettingsPayload["desktopDevices"]>[number] }>(`/api/settings/desktop-devices/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function updateDepartment(code: string, payload: { head: string; staff: number; lines: number }) {

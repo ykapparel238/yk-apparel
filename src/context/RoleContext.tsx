@@ -17,6 +17,13 @@ import {
   type LoginInput,
   type Role,
 } from "@/lib/auth";
+import {
+  clearDesktopCachedSession,
+  getDesktopCachedSession,
+  getDesktopSyncStatus,
+  runDesktopSyncNow,
+  setDesktopCachedSession,
+} from "@/lib/desktopBridge";
 import type { AuthUser } from "@/lib/types";
 
 interface RoleCtx {
@@ -37,13 +44,32 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    getDesktopSyncStatus()
+      .then((status) => {
+        if (status.accessState === "locked") {
+          clearRoleOverride();
+          setRoleState(null);
+          setUser(null);
+          setIsReady(true);
+        }
+      })
+      .catch(() => {});
+
     readSession()
       .then((session) => {
         const nextRole = readRoleOverride() ?? session.user.role;
         setRoleState(nextRole);
         setUser(session.user);
+        void setDesktopCachedSession(session.user);
       })
-      .catch(() => {
+      .catch(async () => {
+        const cachedUser = await getDesktopCachedSession();
+        if (cachedUser) {
+          const nextRole = readRoleOverride() ?? cachedUser.role;
+          setRoleState(nextRole);
+          setUser(cachedUser);
+          return;
+        }
         clearRoleOverride();
         setRoleState(null);
         setUser(null);
@@ -57,14 +83,22 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (input: LoginInput) => {
+    const syncStatus = await getDesktopSyncStatus();
+    if (syncStatus.accessState === "locked") {
+      throw new Error("This desktop is locked and cannot sign in until access is restored.");
+    }
+
     const session = await authenticate(input);
     const nextRole = readRoleOverride() ?? session.user.role;
     setRoleState(nextRole);
     setUser(session.user);
+    await setDesktopCachedSession(session.user);
+    await runDesktopSyncNow();
   }, []);
 
   const logout = useCallback(() => {
     void logoutSession();
+    void clearDesktopCachedSession();
     clearRoleOverride();
     setRoleState(null);
     setUser(null);

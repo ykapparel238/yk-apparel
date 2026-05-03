@@ -24,6 +24,11 @@ const userSchema = z.object({
   shiftCode: z.string().optional().nullable(),
 });
 
+const desktopDeviceSchema = z.object({
+  status: z.enum(["ACTIVE", "RESTRICTED", "LOCKED", "REVOKED"]),
+  rebuildRequired: z.boolean().optional(),
+});
+
 function mapRole(value) {
   return value
     .toLowerCase()
@@ -41,7 +46,7 @@ function formatLastActive(date) {
 }
 
 router.get("/", asyncHandler(async (_req, res) => {
-  const [departments, shifts, users, auditLogs] = await Promise.all([
+  const [departments, shifts, users, auditLogs, devices] = await Promise.all([
     prisma.department.findMany({ orderBy: { code: "asc" } }),
     prisma.shift.findMany({ orderBy: { code: "asc" } }),
     prisma.user.findMany({ orderBy: { employeeCode: "asc" } }),
@@ -49,6 +54,12 @@ router.get("/", asyncHandler(async (_req, res) => {
       orderBy: { occurredAt: "desc" },
       include: { actor: true },
       take: 20,
+    }),
+    prisma.desktopDevice.findMany({
+      orderBy: { updatedAt: "desc" },
+      include: {
+        conflicts: true,
+      },
     }),
   ]);
 
@@ -86,6 +97,56 @@ router.get("/", asyncHandler(async (_req, res) => {
       target: item.targetLabel,
       module: item.module,
     })),
+    desktopDevices: devices.map((device) => ({
+      id: device.id,
+      clientVersion: device.clientVersion,
+      workspaceId: device.workspaceId,
+      status: device.status,
+      rebuildRequired: device.rebuildRequired,
+      lastSeenAt: device.lastSeenAt.toISOString().slice(0, 16).replace("T", " "),
+      conflicts: device.conflicts.length,
+    })),
+  });
+}));
+
+router.patch("/desktop-devices/:id", requireRoles("ADMIN"), asyncHandler(async (req, res) => {
+  const parsed = desktopDeviceSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid desktop device payload", "INVALID_DESKTOP_DEVICE_PAYLOAD", parsed.error.flatten());
+  }
+
+  const existing = await prisma.desktopDevice.findUnique({ where: { id: req.params.id }, include: { conflicts: true } });
+  if (!existing) {
+    return fail(res, 404, "Desktop device not found", "DESKTOP_DEVICE_NOT_FOUND");
+  }
+
+  const updated = await prisma.desktopDevice.update({
+    where: { id: req.params.id },
+    data: {
+      status: parsed.data.status,
+      rebuildRequired: parsed.data.rebuildRequired ?? existing.rebuildRequired,
+    },
+    include: { conflicts: true },
+  });
+
+  await writeAuditLog(req, {
+    module: "Settings",
+    action: "Updated desktop device",
+    targetType: "DesktopDevice",
+    targetId: updated.id,
+    targetLabel: updated.id,
+  });
+
+  return ok(res, {
+    item: {
+      id: updated.id,
+      clientVersion: updated.clientVersion,
+      workspaceId: updated.workspaceId,
+      status: updated.status,
+      rebuildRequired: updated.rebuildRequired,
+      lastSeenAt: updated.lastSeenAt.toISOString().slice(0, 16).replace("T", " "),
+      conflicts: updated.conflicts.length,
+    },
   });
 }));
 

@@ -5,6 +5,7 @@ const prisma = {
   shift: { findMany: vi.fn() },
   user: { findMany: vi.fn() },
   auditLog: { findMany: vi.fn() },
+  desktopDevice: { findMany: vi.fn() },
 };
 
 vi.mock("../../server/db.mjs", () => ({ prisma }));
@@ -47,6 +48,7 @@ describe("settings read route", () => {
     prisma.shift.findMany.mockResolvedValue([{ id: "shift-1", code: "A", name: "Shift A", startTime: "06:00", endTime: "14:00", supervisorName: "Sup", headcount: 20 }]);
     prisma.user.findMany.mockResolvedValue([{ id: "u1", employeeCode: "EMP-1", name: "Rohit", email: "r@test.com", role: "ADMIN", status: "ACTIVE", departmentId: "dep-1", shiftId: "shift-1", lastActiveAt: new Date("2026-04-20T10:00:00.000Z") }]);
     prisma.auditLog.findMany.mockResolvedValue([{ id: "a1", occurredAt: new Date("2026-04-20T10:00:00.000Z"), actor: { name: "Rohit" }, action: "Updated", targetLabel: "Knitting", module: "Settings" }]);
+    prisma.desktopDevice.findMany.mockResolvedValue([{ id: "device-1", clientVersion: "1.0.0", workspaceId: "default", status: "ACTIVE", rebuildRequired: false, lastSeenAt: new Date("2026-05-03T10:00:00.000Z"), conflicts: [] }]);
 
     const res = await invokeRoute(route);
 
@@ -55,5 +57,6 @@ describe("settings read route", () => {
     expect(res.body.shifts).toHaveLength(1);
     expect(res.body.users[0]).toMatchObject({ id: "EMP-1", departmentCode: "D01", shiftCode: "A" });
     expect(res.body.auditLog).toHaveLength(1);
+    expect(res.body.desktopDevices).toHaveLength(1);
   });
 });

@@ -19,6 +19,11 @@ const prisma = {
   auditLog: {
     findMany: vi.fn(),
   },
+  desktopDevice: {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    update: vi.fn(),
+  },
 };
 
 const writeAuditLog = vi.fn();
@@ -230,5 +235,40 @@ describe("settings route", () => {
     expect(res.statusCode).toBe(403);
     expect(res.body.code).toBe("FORBIDDEN");
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("updates desktop devices and writes audit logs", async () => {
+    const route = (await import("../../server/routes/settings.mjs")).default;
+    prisma.desktopDevice.findUnique.mockResolvedValue({
+      id: "device-1",
+      clientVersion: "1.0.0",
+      workspaceId: "default",
+      status: "ACTIVE",
+      rebuildRequired: false,
+      lastSeenAt: new Date("2026-05-03T10:00:00.000Z"),
+      conflicts: [{ id: "c1" }],
+    });
+    prisma.desktopDevice.update.mockResolvedValue({
+      id: "device-1",
+      clientVersion: "1.0.0",
+      workspaceId: "default",
+      status: "RESTRICTED",
+      rebuildRequired: true,
+      lastSeenAt: new Date("2026-05-03T10:00:00.000Z"),
+      conflicts: [{ id: "c1" }],
+    });
+
+    const { res } = await invokeRoute(route, "patch", "/desktop-devices/:id", {
+      params: { id: "device-1" },
+      body: { status: "RESTRICTED", rebuildRequired: true },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.desktopDevice.update).toHaveBeenCalledWith({
+      where: { id: "device-1" },
+      data: { status: "RESTRICTED", rebuildRequired: true },
+      include: { conflicts: true },
+    });
+    expect(writeAuditLog).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ action: "Updated desktop device" }));
   });
 });

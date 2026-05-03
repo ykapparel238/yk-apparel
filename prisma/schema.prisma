@@ -537,3 +537,92 @@ model Alert {
   vendor      Vendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   material    Material?      @relation(fields: [materialId], references: [id], onDelete: SetNull)
 }
+
+model DesktopDevice {
+  id              String           @id
+  clientVersion   String
+  workspaceId     String           @default("default")
+  status          String           @default("ACTIVE")
+  rebuildRequired Boolean          @default(false)
+  lastSeenAt      DateTime         @default(now())
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  checkpoints     SyncCheckpoint[]
+  processedBundles ProcessedBundle[]
+  conflicts       SyncConflict[]
+}
+
+model ProcessedBundle {
+  id            String            @id @default(cuid())
+  bundleId      String            @unique
+  deviceId      String
+  workspaceId   String            @default("default")
+  entityType    String
+  entityId      String
+  operationType String
+  clientVersion String
+  result        Json?
+  processedAt   DateTime          @default(now())
+
+  device        DesktopDevice     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  mutations     ProcessedMutation[]
+
+  @@index([deviceId, processedAt])
+}
+
+model ProcessedMutation {
+  id                String          @id @default(cuid())
+  mutationId        String          @unique
+  bundleId          String
+  processedBundleId String
+  deviceId          String
+  entityType        String
+  entityId          String
+  operationType     String
+  payload           Json
+  baseVersion       String?
+  result            Json?
+  processedAt       DateTime        @default(now())
+
+  processedBundle   ProcessedBundle @relation(fields: [processedBundleId], references: [id], onDelete: Cascade)
+
+  @@index([bundleId])
+  @@index([deviceId, processedAt])
+}
+
+model SyncCheckpoint {
+  id          String         @id @default(cuid())
+  checkpointId String        @unique
+  deviceId    String
+  cursorAt    DateTime
+  issuedAt    DateTime       @default(now())
+  expiresAt   DateTime
+  status      String         @default("ok")
+
+  device      DesktopDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, issuedAt])
+}
+
+model SyncConflict {
+  id            String         @id @default(cuid())
+  deviceId      String
+  bundleId      String
+  mutationId    String
+  entityType    String
+  entityId      String
+  conflictType  String
+  summary       String
+  localSnapshot Json
+  serverSnapshot Json
+  chosenAction  String?
+  rationale     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  device        DesktopDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, createdAt])
+  @@index([bundleId, mutationId])
+}

@@ -7,6 +7,7 @@ import { findSessionUser, getSessionCookieName, serializeUser } from "./auth.mjs
 import { ApiError, fail } from "./http.mjs";
 import { logError, logInfo, requestLogger } from "./logger.mjs";
 import authRoutes from "./routes/auth.mjs";
+import assetsRoutes from "./routes/assets.mjs";
 import dispatchRoutes from "./routes/dispatch.mjs";
 import dashboardRoutes from "./routes/dashboard.mjs";
 import inventoryRoutes from "./routes/inventory.mjs";
@@ -20,6 +21,7 @@ import reportsRoutes from "./routes/reports.mjs";
 import settingsRoutes from "./routes/settings.mjs";
 import syncRoutes from "./routes/sync.mjs";
 import vendorsRoutes from "./routes/vendors.mjs";
+import { ensureUploadDirectory, getUploadLocalDir } from "./storage.mjs";
 
 const app = express();
 const env = getEnv();
@@ -59,6 +61,8 @@ app.use(
 app.use(requestLogger);
 app.use(express.json());
 app.use(cookieParser());
+ensureUploadDirectory();
+app.use("/uploads", express.static(getUploadLocalDir()));
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, environment: env.NODE_ENV });
@@ -95,6 +99,7 @@ app.use("/api", (req, res, next) => {
   const role = req.sessionUser?.role;
   const policies = [
     { prefix: "/masters", roles: ["ADMIN"] },
+    { prefix: "/assets", roles: ["ADMIN"] },
     { prefix: "/settings", roles: ["ADMIN"] },
     { prefix: "/inventory", roles: ["ADMIN", "STORE_MANAGER"] },
     { prefix: "/qa", roles: ["ADMIN", "QA_MANAGER"] },
@@ -113,6 +118,7 @@ app.use("/api", (req, res, next) => {
 });
 
 app.use("/api/orders", ordersRoutes);
+app.use("/api/assets", assetsRoutes);
 app.use("/api/masters", mastersRoutes);
 app.use("/api/planning", planningRoutes);
 app.use("/api/production", productionRoutes);

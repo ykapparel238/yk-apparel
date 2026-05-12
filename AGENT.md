@@ -62,8 +62,9 @@ Status values:
   - request and error logging added for server operations
   - env validation now covers app origin, CORS, proxy trust, session TTL, and auth throttling config
   - route-level auth tests now cover login, logout, and active session flows
+  - release verification scripts now exist for live smoke and full release gating
 - Left:
-  - no major gaps in current MVP scope; continue verifying in live deploys
+  - continue verifying against real deployed environments
 
 ### 2. Master Data
 - Status: `partially_done`
@@ -116,6 +117,10 @@ Status values:
   - planning validation now blocks planned quantity beyond order quantity
   - business-rule tests added for planning date window calculations
   - route-level tests now cover quantity guardrails and create-plan audit/status transitions
+  - Production page now supports actual production entry create/edit flows in the existing dialog pattern
+  - production entry APIs now cover stage, line, shift, planned, actual, rejected, downtime, reason, and remarks
+  - stage and line read models now prefer real production-entry aggregates when live execution data exists
+  - route-level tests now cover production entry creation alongside existing production read coverage
 - Left:
   - no major gaps in current MVP scope; continue with live deploy verification
 
@@ -128,6 +133,7 @@ Status values:
   - issue challan flow added on the vendor detail screen
   - challan inward/rejection update flow added
   - route-level tests now cover challan totals validation and closed-state update flow
+  - vendor detail now surfaces CAPA counts and quality risk signals from live QA corrective actions
 - Left:
   - broader vendor lifecycle coverage
 
@@ -142,8 +148,12 @@ Status values:
   - shortage-driven procurement requests are now supported with create/update APIs and audit logs
   - Inventory screen now shows shortage and procurement request state in the existing table layout
   - procurement request list is now visible in Inventory using the existing table/card patterns
+  - supplier purchase orders are now supported with create/update APIs in the existing Inventory workflow
+  - goods receipt posting now updates PO receipt progress, closes procurement when fully received, and increases material stock
+  - Inventory page now shows supplier PO state and receive-stock actions without introducing a new screen
+  - route-level tests now cover supplier PO creation and goods receipt stock reconciliation
 - Left:
-  - broader supplier purchasing workflows beyond request tracking
+  - broader supplier purchasing workflows beyond operational PO and receipt tracking
 
 ### 7. QA
 - Status: `partially_done`
@@ -155,6 +165,9 @@ Status values:
   - inspection edit workflow added through the existing QA dialog shell
   - QA writes now use validation, role checks, shared error codes, and audit logs
   - route-level tests now cover invalid dates, invalid totals, defect persistence, update flow, and summary payload shape
+  - CAPA create/update workflow added in the existing QA screen
+  - QA payload now includes CAPA items and vendor-level open CAPA counts
+  - route-level tests now cover CAPA create/update behavior
 - Left:
   - broader integration coverage beyond route-level tests
 
@@ -198,6 +211,7 @@ Status values:
   - dashboard payload now reads through centralized reporting logic instead of separate ad hoc route aggregation
   - dashboard route regression coverage added
   - exact dashboard KPI reconciliation tests now assert deterministic seeded-style totals
+  - live release reconciliation now verifies dashboard totals against orders and management summary outputs
 - Left:
   - continue moving remaining metrics toward reporting-view-only sources where beneficial
 
@@ -212,6 +226,8 @@ Status values:
   - MRP shortage visibility is now surfaced inside the Reports screen
   - report-side MRP rows now reflect active procurement request state
   - route-level tests now cover report summary, detail, CSV export, and PDF export flows
+  - release smoke now verifies report summary, CSV export, and PDF export in a live stack
+  - procurement status, production actuals, and CAPA closure reports are now part of the shared reporting catalog
 - Left:
   - continue with reconciliation and live deploy verification
 
@@ -225,6 +241,7 @@ Status values:
   - dedicated MRP calculation tests added
   - MRP rows now expose active procurement request state so shortages can be actioned safely
   - forecast/wastage and order-risk report outputs are now available through the existing Reports catalog
+  - release smoke now reconciles `/api/mrp` totals against the MRP report output
 - Left:
   - deeper reconciliation coverage
 
@@ -239,6 +256,26 @@ Status values:
   - deeper model calibration if the business wants production-grade planning science beyond current heuristics
 - Pages: none yet
 
+### 14. Style Tech Pack and Uploads
+- Status: `partially_done`
+- Pages: Masters, OrderDetail
+- Done:
+  - style tech-pack schema added with `FileAsset`, `StyleSample`, `StyleSampleAsset`, `StyleMeasurementSpec`, and `StyleThreadSpec`
+  - upload/storage env contract added with local development storage
+  - `/api/assets` route added for asset create/read/delete
+  - `/api/masters/styles/:id/tech-pack` read/update endpoints added
+  - `/api/masters/styles/:id/samples` create/update endpoints added
+  - `/api/masters/styles/:id/assets` attach/delete endpoints added
+  - Masters style row `Tech pack` action now opens a real editor dialog for assets, sample specs, measurements, thread specs, and colorway metadata
+  - Order detail payload now includes `techPack`, and `OrderDetail` renders assets, samples, thread specs, colorways, and measurement chart
+  - seeded sample tech-pack metadata added for representative styles
+  - route-level tests added for assets, tech-pack reads/updates, style sample creation, and order-detail tech-pack payload
+- Left:
+  - production object-storage wiring and live upload verification still need real-environment confirmation
+  - run the new migration locally and seed again in a real DB
+  - wire S3-compatible production storage beyond the local-driver fallback
+  - optionally add stronger image preview/fallback behavior for missing seed files in non-uploaded environments
+
 ## Page Mapping
 
 - Login: implemented
@@ -247,7 +284,7 @@ Status values:
 - Planning: implemented
 - Calendar: implemented
 - Production: implemented
-- Masters: partially implemented
+- Masters: implemented
 - Vendors: pending
 - Vendors: implemented
 - VendorDetail: implemented

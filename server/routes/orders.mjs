@@ -3,6 +3,7 @@ import { z } from "zod";
 import { writeAuditLog } from "../audit.mjs";
 import { prisma } from "../db.mjs";
 import { ApiError, asyncHandler, fail, ok } from "../http.mjs";
+import { mapStyleTechPack, styleTechPackInclude } from "../style-tech-pack.mjs";
 
 const router = Router();
 
@@ -421,6 +422,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
           bomItems: {
             include: { material: { include: { supplier: true } } },
           },
+          ...styleTechPackInclude,
         },
       },
       colorAllocations: true,
@@ -435,6 +437,11 @@ router.get("/:id", asyncHandler(async (req, res) => {
   if (!order) {
     return fail(res, 404, "Order not found", "ORDER_NOT_FOUND");
   }
+
+  const styleAssets = await prisma.fileAsset.findMany({
+    where: { entityType: "STYLE", entityId: order.styleId },
+    orderBy: { createdAt: "desc" },
+  });
 
   return ok(res, {
     item: mapOrder(order),
@@ -467,6 +474,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
       rejected: challan.rejectedQty,
       status: mapStatus(challan.status),
     })),
+    techPack: mapStyleTechPack(order.style, styleAssets),
   });
 }));
 

@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createQaInspection, fetchQa, updateQaInspection } from "@/lib/services";
+import { createCapa, createQaInspection, fetchQa, updateCapa, updateQaInspection } from "@/lib/services";
 import { ShieldCheck, AlertOctagon, RotateCcw, CheckCircle2, Plus, Pencil } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useState } from "react";
@@ -49,7 +49,20 @@ const inspectionSchema = z.object({
   defectCount: z.coerce.number().int().min(0),
 });
 
+const capaSchema = z.object({
+  inspectionId: z.string().optional(),
+  vendorId: z.string().optional(),
+  orderId: z.string().optional(),
+  lineId: z.string().optional(),
+  title: z.string().min(3, "Enter a title"),
+  rootCause: z.string().min(3, "Enter a root cause"),
+  ownerName: z.string().min(2, "Enter an owner"),
+  dueDate: z.string().min(1, "Select a due date"),
+  status: z.enum(["OPEN", "IN_PROGRESS", "CLOSED"]).default("OPEN"),
+});
+
 type InspectionInput = z.infer<typeof inspectionSchema>;
+type CapaInput = z.infer<typeof capaSchema>;
 
 const stageOptions = [
   "YARN_INWARD",
@@ -67,6 +80,8 @@ const stageOptions = [
 export default function QA() {
   const [open, setOpen] = useState(false);
   const [editingInspectionId, setEditingInspectionId] = useState<string | null>(null);
+  const [capaOpen, setCapaOpen] = useState(false);
+  const [editingCapaId, setEditingCapaId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const qaQuery = useQuery({
     queryKey: ["qa"],
@@ -87,6 +102,20 @@ export default function QA() {
       reworkQty: 0,
       defectTypeId: "",
       defectCount: 0,
+    },
+  });
+  const capaForm = useForm<CapaInput>({
+    resolver: zodResolver(capaSchema),
+    defaultValues: {
+      inspectionId: "",
+      vendorId: "",
+      orderId: "",
+      lineId: "",
+      title: "",
+      rootCause: "",
+      ownerName: "",
+      dueDate: "",
+      status: "OPEN",
     },
   });
 
@@ -143,6 +172,50 @@ export default function QA() {
       });
     },
   });
+  const capaMutation = useMutation({
+    mutationFn: (values: CapaInput) => {
+      const payload = {
+        inspectionId: values.inspectionId || null,
+        vendorId: values.vendorId || null,
+        orderId: values.orderId || null,
+        lineId: values.lineId || null,
+        title: values.title,
+        rootCause: values.rootCause,
+        ownerName: values.ownerName,
+        dueDate: values.dueDate,
+        status: values.status,
+      };
+      if (editingCapaId) {
+        return updateCapa(editingCapaId, payload);
+      }
+      return createCapa(payload);
+    },
+    onSuccess: async () => {
+      toast.success(editingCapaId ? "CAPA updated" : "CAPA created");
+      setCapaOpen(false);
+      setEditingCapaId(null);
+      capaForm.reset({
+        inspectionId: "",
+        vendorId: "",
+        orderId: "",
+        lineId: "",
+        title: "",
+        rootCause: "",
+        ownerName: "",
+        dueDate: "",
+        status: "OPEN",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["qa"] });
+      await queryClient.invalidateQueries({ queryKey: ["vendors"] });
+      await queryClient.invalidateQueries({ queryKey: ["vendor-detail"] });
+      await queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+    onError: (error) => {
+      toast.error("Unable to save CAPA", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    },
+  });
 
   if (qaQuery.isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground">Loading QA...</div>;
@@ -152,7 +225,7 @@ export default function QA() {
     return <div className="p-8 text-center text-sm text-destructive">Unable to load QA.</div>;
   }
 
-  const { summary, defects, vendors, inspections, orderOptions, lineOptions, defectTypes } = qaQuery.data;
+  const { summary, defects, vendors, inspections, orderOptions, lineOptions, defectTypes, capaItems } = qaQuery.data;
 
   const openCreate = () => {
     setEditingInspectionId(null);
@@ -190,6 +263,22 @@ export default function QA() {
     setOpen(true);
   };
 
+  const openCapaCreate = () => {
+    setEditingCapaId(null);
+    capaForm.reset({
+      inspectionId: inspections[0]?.id ?? "",
+      vendorId: vendors[0]?.id ?? "",
+      orderId: orderOptions[0]?.id ?? "",
+      lineId: lineOptions[0]?.id ?? "",
+      title: "",
+      rootCause: "",
+      ownerName: "",
+      dueDate: new Date().toISOString().slice(0, 10),
+      status: "OPEN",
+    });
+    setCapaOpen(true);
+  };
+
   return (
     <div>
       <PageHeader
@@ -197,9 +286,14 @@ export default function QA() {
         title="Quality Assurance"
         description="Inline & endline checks, rejection trends, root cause analysis"
         actions={
-          <Button size="sm" className="h-9" onClick={openCreate}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Inspection
-          </Button>
+          <>
+            <Button size="sm" variant="outline" className="h-9" onClick={openCapaCreate}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> Add CAPA
+            </Button>
+            <Button size="sm" className="h-9" onClick={openCreate}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Inspection
+            </Button>
+          </>
         }
       />
 
@@ -302,6 +396,69 @@ export default function QA() {
         </table>
       </div>
 
+      <div className="bg-card border border-border rounded-lg overflow-hidden mt-4">
+        <div className="p-5 border-b border-border">
+          <h3 className="text-sm font-semibold">Corrective Actions (CAPA)</h3>
+          <p className="text-xs text-muted-foreground">Open and closed quality actions linked to inspections and vendors</p>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <tr className="text-left">
+              <th className="px-4 py-3 font-semibold">Title</th>
+              <th className="px-4 py-3 font-semibold">Owner</th>
+              <th className="px-4 py-3 font-semibold">Vendor / Order</th>
+              <th className="px-4 py-3 font-semibold">Due</th>
+              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {capaItems.length ? capaItems.map((item) => (
+              <tr key={item.id} className="data-table-row">
+                <td className="px-4 py-3">
+                  <div className="font-medium">{item.title}</div>
+                  <div className="text-xs text-muted-foreground">{item.rootCause}</div>
+                </td>
+                <td className="px-4 py-3 text-xs">{item.ownerName}</td>
+                <td className="px-4 py-3 text-xs">{item.vendorName ?? "Internal"}{item.orderPo ? ` • ${item.orderPo}` : ""}</td>
+                <td className="px-4 py-3 text-xs font-mono-num">{item.dueDate}</td>
+                <td className="px-4 py-3 text-xs">{item.status.replaceAll("_", " ")}</td>
+                <td className="px-2 py-3 text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setEditingCapaId(item.id);
+                      capaForm.reset({
+                        inspectionId: item.inspectionId ?? "",
+                        vendorId: item.vendorId ?? "",
+                        orderId: item.orderId ?? "",
+                        lineId: item.lineId ?? "",
+                        title: item.title,
+                        rootCause: item.rootCause,
+                        ownerName: item.ownerName,
+                        dueDate: item.dueDate,
+                        status: item.status,
+                      });
+                      setCapaOpen(true);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No CAPA actions recorded yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
       <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? setOpen(true) : resetForm())}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -384,6 +541,102 @@ export default function QA() {
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>
                 <Button type="submit" disabled={inspectionMutation.isPending}>{inspectionMutation.isPending ? "Saving..." : editingInspectionId ? "Save Changes" : "Save Inspection"}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={capaOpen} onOpenChange={(nextOpen) => (nextOpen ? setCapaOpen(true) : setCapaOpen(false))}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingCapaId ? "Edit CAPA" : "Add CAPA"}</DialogTitle>
+            <DialogDescription>Create and track corrective actions from inspection and vendor quality issues.</DialogDescription>
+          </DialogHeader>
+          <Form {...capaForm}>
+            <form onSubmit={capaForm.handleSubmit((values) => capaMutation.mutate(values))} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={capaForm.control} name="title" render={({ field }) => (
+                  <Field label="Title"><FormControl><Input {...field} /></FormControl><FormMessage className="text-[11px]" /></Field>
+                )} />
+                <FormField control={capaForm.control} name="ownerName" render={({ field }) => (
+                  <Field label="Owner"><FormControl><Input {...field} /></FormControl><FormMessage className="text-[11px]" /></Field>
+                )} />
+              </div>
+              <FormField control={capaForm.control} name="rootCause" render={({ field }) => (
+                <Field label="Root Cause"><FormControl><Input {...field} /></FormControl><FormMessage className="text-[11px]" /></Field>
+              )} />
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={capaForm.control} name="inspectionId" render={({ field }) => (
+                  <Field label="Inspection">
+                    <Select value={field.value || "__none__"} onValueChange={(value) => field.onChange(value === "__none__" ? "" : value)}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {inspections.map((inspection) => <SelectItem key={inspection.id} value={inspection.id}>{inspection.inspectedAt} • {inspection.stage.replaceAll("_", " ")}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )} />
+                <FormField control={capaForm.control} name="status" render={({ field }) => (
+                  <Field label="Status">
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="OPEN">Open</SelectItem>
+                        <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                        <SelectItem value="CLOSED">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )} />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <FormField control={capaForm.control} name="vendorId" render={({ field }) => (
+                  <Field label="Vendor">
+                    <Select value={field.value || "__none__"} onValueChange={(value) => field.onChange(value === "__none__" ? "" : value)}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {vendors.map((vendor) => <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )} />
+                <FormField control={capaForm.control} name="orderId" render={({ field }) => (
+                  <Field label="Order">
+                    <Select value={field.value || "__none__"} onValueChange={(value) => field.onChange(value === "__none__" ? "" : value)}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {orderOptions.map((order) => <SelectItem key={order.id} value={order.id}>{order.poNumber}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )} />
+                <FormField control={capaForm.control} name="lineId" render={({ field }) => (
+                  <Field label="Line">
+                    <Select value={field.value || "__none__"} onValueChange={(value) => field.onChange(value === "__none__" ? "" : value)}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {lineOptions.map((line) => <SelectItem key={line.id} value={line.id}>{line.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </Field>
+                )} />
+              </div>
+              <FormField control={capaForm.control} name="dueDate" render={({ field }) => (
+                <Field label="Due Date"><FormControl><Input type="date" {...field} /></FormControl><FormMessage className="text-[11px]" /></Field>
+              )} />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setCapaOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={capaMutation.isPending}>{capaMutation.isPending ? "Saving..." : "Save CAPA"}</Button>
               </DialogFooter>
             </form>
           </Form>

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,7 +63,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -72,17 +73,23 @@ import {
   createLine,
   createMaterial,
   createStyle,
+  createStyleSample,
   createSupplier,
   createVendor,
   deleteBrand,
   deleteBomItem,
   deleteLine,
   deleteMaterial,
+  deleteStyleAsset,
   deleteStyle,
   deleteSupplier,
   deleteVendor,
+  fetchStyleTechPack,
   fetchMastersOptions,
   fetchMastersSummary,
+  uploadAsset,
+  updateStyleSample,
+  updateStyleTechPack,
   updateBomItem,
   updateBrand,
   updateLine,
@@ -94,11 +101,13 @@ import {
 import type {
   MasterBomItem,
   MasterBrand,
+  FileAssetItem,
   MasterLine,
   MasterMaterial,
   MasterStyle,
   MasterSupplier,
   MasterVendor,
+  StyleTechPackPayload,
 } from "@/lib/types";
 
 const notify = (label: string) => toast(`${label} — coming soon`);
@@ -201,6 +210,49 @@ const splitCsv = (value: string) =>
 const styleColorsFromText = (value: string) =>
   splitCsv(value).map((name) => ({ name, hexCode: null }));
 
+const emptyMeasurement = () => ({
+  sizeLabel: "",
+  measurementPoint: "",
+  targetValue: 0,
+  tolerancePlus: 0,
+  toleranceMinus: 0,
+  unit: "in",
+});
+
+const emptyThreadSpec = (sortOrder = 1) => ({
+  materialName: "",
+  countSpec: "",
+  colorRef: "",
+  supplierId: null as string | null,
+  materialId: null as string | null,
+  processNotes: "",
+  sortOrder,
+});
+
+const emptyColorway = () => ({
+  name: "",
+  hexCode: "",
+  pantoneCode: "",
+  threadCode: "",
+  notes: "",
+});
+
+const sampleDefaults = {
+  sampleType: "PROTO" as const,
+  status: "DRAFT" as const,
+  notes: "",
+};
+
+async function fileToBase64(file: File) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return window.btoa(binary);
+}
+
 function getDeleteLabel(state: DeleteState) {
   if (!state) return "";
   if (state.kind === "bom") return `${state.item.styleCode} / ${state.item.materialSku}`;
@@ -213,6 +265,10 @@ export default function Masters() {
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<EditorState>(null);
   const [deleteState, setDeleteState] = useState<DeleteState>(null);
+  const [techPackStyle, setTechPackStyle] = useState<MasterStyle | null>(null);
+  const [techPackDraft, setTechPackDraft] = useState<StyleTechPackPayload | null>(null);
+  const [sampleDraft, setSampleDraft] = useState(sampleDefaults);
+  const [sampleAssetIds, setSampleAssetIds] = useState<string[]>([]);
   const queryClient = useQueryClient();
 
   const summaryQuery = useQuery({
@@ -223,10 +279,26 @@ export default function Masters() {
     queryKey: ["masters-options"],
     queryFn: fetchMastersOptions,
   });
+  const techPackQuery = useQuery({
+    queryKey: ["style-tech-pack", techPackStyle?.id],
+    queryFn: () => fetchStyleTechPack(techPackStyle!.id),
+    enabled: Boolean(techPackStyle?.id),
+  });
+
+  useEffect(() => {
+    if (techPackQuery.data) {
+      setTechPackDraft(techPackQuery.data);
+      setSampleDraft(sampleDefaults);
+      setSampleAssetIds([]);
+    }
+  }, [techPackQuery.data]);
 
   const refreshMasters = async () => {
     await queryClient.invalidateQueries({ queryKey: ["masters-summary"] });
     await queryClient.invalidateQueries({ queryKey: ["order-options"] });
+    if (techPackStyle?.id) {
+      await queryClient.invalidateQueries({ queryKey: ["style-tech-pack", techPackStyle.id] });
+    }
   };
 
   const brandForm = useForm<BrandForm>({
@@ -453,6 +525,106 @@ export default function Masters() {
     },
   });
 
+  const techPackMutation = useMutation({
+    mutationFn: async () => {
+      if (!techPackStyle || !techPackDraft) {
+        throw new Error("No style selected");
+      }
+      return updateStyleTechPack(techPackStyle.id, {
+        measurements: techPackDraft.measurements,
+        threadSpecs: techPackDraft.threadSpecs,
+        colorways: techPackDraft.colorways,
+      });
+    },
+    onSuccess: async (payload) => {
+      setTechPackDraft(payload);
+      toast.success("Tech pack updated");
+      await refreshMasters();
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Unable to update tech pack");
+    },
+  });
+
+  const sampleMutation = useMutation({
+    mutationFn: async () => {
+      if (!techPackStyle) {
+        throw new Error("No style selected");
+      }
+
+      const existing = techPackDraft?.samples.find((item) => item.sampleType === sampleDraft.sampleType);
+      const payload = {
+        sampleType: sampleDraft.sampleType,
+        status: sampleDraft.status,
+        notes: sampleDraft.notes,
+        assetIds: sampleAssetIds,
+      };
+
+      if (existing) {
+        return updateStyleSample(techPackStyle.id, existing.id, payload);
+      }
+      return createStyleSample(techPackStyle.id, payload);
+    },
+    onSuccess: async () => {
+      toast.success("Sample spec saved");
+      setSampleDraft(sampleDefaults);
+      setSampleAssetIds([]);
+      if (techPackStyle?.id) {
+        await queryClient.invalidateQueries({ queryKey: ["style-tech-pack", techPackStyle.id] });
+      }
+      await refreshMasters();
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Unable to save sample spec");
+    },
+  });
+
+  const assetUploadMutation = useMutation({
+    mutationFn: async ({ file, kind }: { file: File; kind: FileAssetItem["kind"] }) => {
+      if (!techPackStyle) {
+        throw new Error("No style selected");
+      }
+      return uploadAsset({
+        entityType: "STYLE",
+        entityId: techPackStyle.id,
+        kind,
+        fileName: file.name,
+        mimeType: file.type,
+        dataBase64: await fileToBase64(file),
+      });
+    },
+    onSuccess: async (response) => {
+      toast.success(`${response.item.fileName} uploaded`);
+      setSampleAssetIds((current) => Array.from(new Set([...current, response.item.id])));
+      if (techPackStyle?.id) {
+        await queryClient.invalidateQueries({ queryKey: ["style-tech-pack", techPackStyle.id] });
+      }
+      await refreshMasters();
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Unable to upload asset");
+    },
+  });
+
+  const deleteStyleAssetMutation = useMutation({
+    mutationFn: async (assetId: string) => {
+      if (!techPackStyle) {
+        throw new Error("No style selected");
+      }
+      return deleteStyleAsset(techPackStyle.id, assetId);
+    },
+    onSuccess: async () => {
+      toast.success("Asset removed");
+      if (techPackStyle?.id) {
+        await queryClient.invalidateQueries({ queryKey: ["style-tech-pack", techPackStyle.id] });
+      }
+      await refreshMasters();
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Unable to remove asset");
+    },
+  });
+
   const totalRecords = useMemo(() => {
     if (!summaryQuery.data) return 0;
     return (
@@ -465,6 +637,13 @@ export default function Masters() {
       summaryQuery.data.lines.length
     );
   }, [summaryQuery.data]);
+
+  const openTechPack = (style: MasterStyle) => {
+    setTechPackDraft(null);
+    setSampleDraft(sampleDefaults);
+    setSampleAssetIds([]);
+    setTechPackStyle(style);
+  };
 
   const openEditor = (next: EditorState) => {
     setEditor(next);
@@ -878,6 +1057,7 @@ export default function Masters() {
                         label={style.code}
                         type="style"
                         onEdit={() => openEditor({ kind: "style", mode: "edit", item: style })}
+                        onTechPack={() => openTechPack(style)}
                         onDelete={() => setDeleteState({ kind: "style", item: style })}
                       />
                     </td>
@@ -1036,6 +1216,30 @@ export default function Masters() {
         bomMutation={bomMutation}
         lineMutation={lineMutation}
         onClose={() => setEditor(null)}
+      />
+
+      <TechPackDialog
+        style={techPackStyle}
+        draft={techPackDraft}
+        options={{
+          suppliers: optionsQuery.data?.suppliers ?? [],
+          materials: optionsQuery.data?.materials ?? [],
+        }}
+        sampleDraft={sampleDraft}
+        sampleAssetIds={sampleAssetIds}
+        loading={techPackQuery.isLoading}
+        saving={techPackMutation.isPending}
+        sampleSaving={sampleMutation.isPending}
+        assetUploading={assetUploadMutation.isPending}
+        assetDeleting={deleteStyleAssetMutation.isPending}
+        onClose={() => setTechPackStyle(null)}
+        onDraftChange={setTechPackDraft}
+        onSampleDraftChange={setSampleDraft}
+        onSampleAssetIdsChange={setSampleAssetIds}
+        onSave={() => techPackMutation.mutate()}
+        onSaveSample={() => sampleMutation.mutate()}
+        onUpload={(file, kind) => assetUploadMutation.mutate({ file, kind })}
+        onDeleteAsset={(assetId) => deleteStyleAssetMutation.mutate(assetId)}
       />
 
       <Dialog open={Boolean(deleteState)} onOpenChange={(open) => !open && setDeleteState(null)}>
@@ -1396,6 +1600,322 @@ function EditDialog({
   );
 }
 
+function TechPackDialog({
+  style,
+  draft,
+  options,
+  sampleDraft,
+  sampleAssetIds,
+  loading,
+  saving,
+  sampleSaving,
+  assetUploading,
+  assetDeleting,
+  onClose,
+  onDraftChange,
+  onSampleDraftChange,
+  onSampleAssetIdsChange,
+  onSave,
+  onSaveSample,
+  onUpload,
+  onDeleteAsset,
+}: {
+  style: MasterStyle | null;
+  draft: StyleTechPackPayload | null;
+  options: {
+    suppliers: Array<{ id: string; name: string; code: string }>;
+    materials: Array<{ id: string; sku: string; name: string; supplierId?: string | null }>;
+  };
+  sampleDraft: { sampleType: "PROTO" | "FIT" | "SIZE_SET" | "PP" | "SHIPMENT"; status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVISED"; notes: string };
+  sampleAssetIds: string[];
+  loading: boolean;
+  saving: boolean;
+  sampleSaving: boolean;
+  assetUploading: boolean;
+  assetDeleting: boolean;
+  onClose: () => void;
+  onDraftChange: React.Dispatch<React.SetStateAction<StyleTechPackPayload | null>>;
+  onSampleDraftChange: React.Dispatch<React.SetStateAction<{ sampleType: "PROTO" | "FIT" | "SIZE_SET" | "PP" | "SHIPMENT"; status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVISED"; notes: string }>>;
+  onSampleAssetIdsChange: React.Dispatch<React.SetStateAction<string[]>>;
+  onSave: () => void;
+  onSaveSample: () => void;
+  onUpload: (file: File, kind: FileAssetItem["kind"]) => void;
+  onDeleteAsset: (assetId: string) => void;
+}) {
+  return (
+    <Dialog open={Boolean(style)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-5xl max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{style?.code ? `${style.code} Tech Pack` : "Tech Pack"}</DialogTitle>
+          <DialogDescription>
+            Manage design assets, sample specs, thread details, colour metadata, and measurements without leaving Masters.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading || !draft ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">Loading tech pack...</div>
+        ) : (
+          <div className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-[1.2fr,0.8fr]">
+              <div className="space-y-4 rounded-lg border border-border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold">Assets</h3>
+                    <p className="text-xs text-muted-foreground">Sample images, references, and attached PDFs.</p>
+                  </div>
+                  <span className="text-xs font-mono-num text-muted-foreground">{draft.assets.length} files</span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {draft.assets.map((asset) => (
+                    <div key={asset.id} className="rounded-md border border-border p-3 text-xs">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{asset.fileName}</p>
+                          <p className="text-muted-foreground">{asset.kind.replaceAll("_", " ")}</p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          disabled={assetDeleting}
+                          onClick={() => onDeleteAsset(asset.id)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      {asset.mimeType.startsWith("image/") && (
+                        <img
+                          src={asset.url}
+                          alt={asset.fileName}
+                          className="mt-3 h-28 w-full rounded-md border border-border object-cover"
+                        />
+                      )}
+                      <a href={asset.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-primary underline-offset-4 hover:underline">
+                        Open asset
+                      </a>
+                    </div>
+                  ))}
+                  {!draft.assets.length && (
+                    <div className="rounded-md border border-dashed border-border p-4 text-xs text-muted-foreground">
+                      Upload the first sample image, reference, or tech-pack PDF for this style.
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(["SAMPLE_IMAGE", "REFERENCE_IMAGE", "TECH_PACK", "ATTACHMENT"] as const).map((kind) => (
+                    <label key={kind} className="inline-flex">
+                      <Input
+                        type="file"
+                        className="hidden"
+                        accept={kind === "TECH_PACK" ? "application/pdf" : "image/jpeg,image/png,image/webp,application/pdf"}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) onUpload(file, kind);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                      <span className="inline-flex h-8 cursor-pointer items-center rounded-md border border-input bg-background px-3 text-xs">
+                        {assetUploading ? "Uploading..." : `Upload ${kind.toLowerCase().replaceAll("_", " ")}`}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-lg border border-border p-4">
+                <div>
+                  <h3 className="text-sm font-semibold">Sample Spec</h3>
+                  <p className="text-xs text-muted-foreground">Capture sample stage, approval status, and linked visuals.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium">Sample Type</label>
+                    <Select value={sampleDraft.sampleType} onValueChange={(value) => onSampleDraftChange((current) => ({ ...current, sampleType: value as typeof current.sampleType }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PROTO">Proto</SelectItem>
+                        <SelectItem value="FIT">Fit</SelectItem>
+                        <SelectItem value="SIZE_SET">Size Set</SelectItem>
+                        <SelectItem value="PP">PP</SelectItem>
+                        <SelectItem value="SHIPMENT">Shipment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium">Status</label>
+                    <Select value={sampleDraft.status} onValueChange={(value) => onSampleDraftChange((current) => ({ ...current, status: value as typeof current.status }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="DRAFT">Draft</SelectItem>
+                        <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                        <SelectItem value="APPROVED">Approved</SelectItem>
+                        <SelectItem value="REJECTED">Rejected</SelectItem>
+                        <SelectItem value="REVISED">Revised</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium">Notes</label>
+                  <Textarea
+                    value={sampleDraft.notes}
+                    onChange={(event) => onSampleDraftChange((current) => ({ ...current, notes: event.target.value }))}
+                    rows={4}
+                    placeholder="Fit comments, buyer feedback, wash notes..."
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-medium">Link Assets</label>
+                  <div className="space-y-2">
+                    {draft.assets.map((asset) => {
+                      const selected = sampleAssetIds.includes(asset.id);
+                      return (
+                        <label key={asset.id} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={(event) => {
+                              onSampleAssetIdsChange((current) => event.target.checked
+                                ? Array.from(new Set([...current, asset.id]))
+                                : current.filter((item) => item !== asset.id));
+                            }}
+                          />
+                          <span className="truncate">{asset.fileName}</span>
+                        </label>
+                      );
+                    })}
+                    {!draft.assets.length && <p className="text-xs text-muted-foreground">Upload assets first to link them to the sample.</p>}
+                  </div>
+                </div>
+                <Button type="button" size="sm" onClick={onSaveSample} disabled={sampleSaving}>
+                  {sampleSaving ? "Saving sample..." : "Save Sample Spec"}
+                </Button>
+                {!!draft.samples.length && (
+                  <div className="space-y-2 border-t border-border pt-3">
+                    <p className="text-xs font-medium">Existing samples</p>
+                    {draft.samples.map((sample) => (
+                      <div key={sample.id} className="rounded-md border border-border p-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">{sample.sampleType.replaceAll("_", " ")}</span>
+                          <span className="text-muted-foreground">{sample.status}</span>
+                        </div>
+                        <p className="mt-1 text-muted-foreground">{sample.notes || "No notes recorded."}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Measurements</h3>
+                  <p className="text-xs text-muted-foreground">Size chart and tolerance data used downstream in sampling and production.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={() => onDraftChange((current) => current ? { ...current, measurements: [...current.measurements, emptyMeasurement()] } : current)}>
+                  Add Measurement
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {draft.measurements.map((measurement, index) => (
+                  <div key={`${measurement.id ?? "new"}-${index}`} className="grid gap-2 md:grid-cols-[0.8fr_1.3fr_0.7fr_0.6fr_0.6fr_0.5fr_auto]">
+                    <Input value={measurement.sizeLabel} placeholder="Size" onChange={(event) => onDraftChange((current) => current ? { ...current, measurements: current.measurements.map((item, itemIndex) => itemIndex === index ? { ...item, sizeLabel: event.target.value } : item) } : current)} />
+                    <Input value={measurement.measurementPoint} placeholder="Measurement point" onChange={(event) => onDraftChange((current) => current ? { ...current, measurements: current.measurements.map((item, itemIndex) => itemIndex === index ? { ...item, measurementPoint: event.target.value } : item) } : current)} />
+                    <Input type="number" step="0.01" value={measurement.targetValue} onChange={(event) => onDraftChange((current) => current ? { ...current, measurements: current.measurements.map((item, itemIndex) => itemIndex === index ? { ...item, targetValue: Number(event.target.value) } : item) } : current)} />
+                    <Input type="number" step="0.01" value={measurement.tolerancePlus} onChange={(event) => onDraftChange((current) => current ? { ...current, measurements: current.measurements.map((item, itemIndex) => itemIndex === index ? { ...item, tolerancePlus: Number(event.target.value) } : item) } : current)} />
+                    <Input type="number" step="0.01" value={measurement.toleranceMinus} onChange={(event) => onDraftChange((current) => current ? { ...current, measurements: current.measurements.map((item, itemIndex) => itemIndex === index ? { ...item, toleranceMinus: Number(event.target.value) } : item) } : current)} />
+                    <Input value={measurement.unit} onChange={(event) => onDraftChange((current) => current ? { ...current, measurements: current.measurements.map((item, itemIndex) => itemIndex === index ? { ...item, unit: event.target.value } : item) } : current)} />
+                    <Button type="button" size="sm" variant="ghost" onClick={() => onDraftChange((current) => current ? { ...current, measurements: current.measurements.filter((_, itemIndex) => itemIndex !== index) } : current)}>Remove</Button>
+                  </div>
+                ))}
+                {!draft.measurements.length && <p className="text-xs text-muted-foreground">No measurements added yet.</p>}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Thread Specs</h3>
+                  <p className="text-xs text-muted-foreground">Yarn, count, supplier linkage, and process notes.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={() => onDraftChange((current) => current ? { ...current, threadSpecs: [...current.threadSpecs, emptyThreadSpec(current.threadSpecs.length + 1)] } : current)}>
+                  Add Thread Spec
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {draft.threadSpecs.map((spec, index) => (
+                  <div key={`${spec.id ?? "new"}-${index}`} className="grid gap-2 md:grid-cols-2">
+                    <Input value={spec.materialName} placeholder="Material / yarn" onChange={(event) => onDraftChange((current) => current ? { ...current, threadSpecs: current.threadSpecs.map((item, itemIndex) => itemIndex === index ? { ...item, materialName: event.target.value } : item) } : current)} />
+                    <Input value={spec.countSpec} placeholder="Count / spec" onChange={(event) => onDraftChange((current) => current ? { ...current, threadSpecs: current.threadSpecs.map((item, itemIndex) => itemIndex === index ? { ...item, countSpec: event.target.value } : item) } : current)} />
+                    <Input value={spec.colorRef} placeholder="Colour ref" onChange={(event) => onDraftChange((current) => current ? { ...current, threadSpecs: current.threadSpecs.map((item, itemIndex) => itemIndex === index ? { ...item, colorRef: event.target.value } : item) } : current)} />
+                    <Select value={spec.supplierId ?? "__none__"} onValueChange={(value) => onDraftChange((current) => current ? { ...current, threadSpecs: current.threadSpecs.map((item, itemIndex) => itemIndex === index ? { ...item, supplierId: value === "__none__" ? null : value } : item) } : current)}>
+                      <SelectTrigger><SelectValue placeholder="Supplier" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No supplier</SelectItem>
+                        {options.suppliers.map((supplier) => <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={spec.materialId ?? "__none__"} onValueChange={(value) => onDraftChange((current) => current ? { ...current, threadSpecs: current.threadSpecs.map((item, itemIndex) => itemIndex === index ? { ...item, materialId: value === "__none__" ? null : value } : item) } : current)}>
+                      <SelectTrigger><SelectValue placeholder="Material link" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No material link</SelectItem>
+                        {options.materials.map((material) => <SelectItem key={material.id} value={material.id}>{material.sku} — {material.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input value={String(spec.sortOrder)} type="number" placeholder="Sort order" onChange={(event) => onDraftChange((current) => current ? { ...current, threadSpecs: current.threadSpecs.map((item, itemIndex) => itemIndex === index ? { ...item, sortOrder: Number(event.target.value) } : item) } : current)} />
+                    <Textarea value={spec.processNotes} rows={2} placeholder="Process notes" onChange={(event) => onDraftChange((current) => current ? { ...current, threadSpecs: current.threadSpecs.map((item, itemIndex) => itemIndex === index ? { ...item, processNotes: event.target.value } : item) } : current)} />
+                    <div className="md:col-span-2">
+                      <Button type="button" size="sm" variant="ghost" onClick={() => onDraftChange((current) => current ? { ...current, threadSpecs: current.threadSpecs.filter((_, itemIndex) => itemIndex !== index) } : current)}>
+                        Remove thread spec
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {!draft.threadSpecs.length && <p className="text-xs text-muted-foreground">No thread specs added yet.</p>}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Colourways</h3>
+                  <p className="text-xs text-muted-foreground">Pantone, thread references, and notes for each colourway.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={() => onDraftChange((current) => current ? { ...current, colorways: [...current.colorways, emptyColorway()] } : current)}>
+                  Add Colourway
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {draft.colorways.map((color, index) => (
+                  <div key={`${color.id ?? "new"}-${index}`} className="grid gap-2 md:grid-cols-[0.9fr_0.8fr_0.8fr_0.8fr_1.2fr_auto]">
+                    <Input value={color.name} placeholder="Colour name" onChange={(event) => onDraftChange((current) => current ? { ...current, colorways: current.colorways.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) } : current)} />
+                    <Input value={color.hexCode ?? ""} placeholder="#RRGGBB" onChange={(event) => onDraftChange((current) => current ? { ...current, colorways: current.colorways.map((item, itemIndex) => itemIndex === index ? { ...item, hexCode: event.target.value } : item) } : current)} />
+                    <Input value={color.pantoneCode ?? ""} placeholder="Pantone" onChange={(event) => onDraftChange((current) => current ? { ...current, colorways: current.colorways.map((item, itemIndex) => itemIndex === index ? { ...item, pantoneCode: event.target.value } : item) } : current)} />
+                    <Input value={color.threadCode ?? ""} placeholder="Thread code" onChange={(event) => onDraftChange((current) => current ? { ...current, colorways: current.colorways.map((item, itemIndex) => itemIndex === index ? { ...item, threadCode: event.target.value } : item) } : current)} />
+                    <Input value={color.notes ?? ""} placeholder="Notes" onChange={(event) => onDraftChange((current) => current ? { ...current, colorways: current.colorways.map((item, itemIndex) => itemIndex === index ? { ...item, notes: event.target.value } : item) } : current)} />
+                    <Button type="button" size="sm" variant="ghost" onClick={() => onDraftChange((current) => current ? { ...current, colorways: current.colorways.filter((_, itemIndex) => itemIndex !== index) } : current)}>
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+              <Button type="button" onClick={onSave} disabled={saving}>
+                {saving ? "Saving tech pack..." : "Save Tech Pack"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function Section({
   title,
   rows,
@@ -1469,11 +1989,13 @@ function RowActions({
   label,
   type,
   onEdit,
+  onTechPack,
   onDelete,
 }: {
   label: string;
   type: "brand" | "supplier" | "vendor" | "style" | "material" | "bom" | "line";
   onEdit: () => void;
+  onTechPack?: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -1510,7 +2032,7 @@ function RowActions({
             <DropdownMenuItem onClick={() => notify(`Open BOM ${label}`)}>
               <ClipboardList className="h-3.5 w-3.5 mr-2" /> Open BOM
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => notify(`Tech pack ${label}`)}>
+            <DropdownMenuItem onClick={() => onTechPack?.()}>
               <FileText className="h-3.5 w-3.5 mr-2" /> Tech pack
             </DropdownMenuItem>
           </>

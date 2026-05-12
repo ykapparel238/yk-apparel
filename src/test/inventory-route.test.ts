@@ -14,12 +14,30 @@ const prisma = {
     update: vi.fn(),
     findUnique: vi.fn(),
   },
+  supplierPurchaseOrder: {
+    findMany: vi.fn(),
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  supplierPurchaseOrderLine: {
+    update: vi.fn(),
+  },
+  goodsReceipt: {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+  },
+  goodsReceiptLine: {
+    create: vi.fn(),
+  },
   billOfMaterialItem: {
     findMany: vi.fn(),
   },
   purchaseOrder: {
     findMany: vi.fn(),
   },
+  $transaction: vi.fn(),
 };
 
 const writeAuditLog = vi.fn();
@@ -67,6 +85,10 @@ async function invokeRoute(router, method, path, reqOverrides = {}) {
 describe("inventory route", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    prisma.$transaction.mockImplementation(async (callback) => {
+      if (typeof callback === "function") return callback(prisma);
+      return Promise.all(callback);
+    });
   });
 
   afterEach(() => {
@@ -218,6 +240,120 @@ describe("inventory route", () => {
 
     expect(res.statusCode).toBe(200);
     expect(prisma.procurementRequest.update).toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalled();
+  });
+
+  it("creates a supplier purchase order from a procurement request", async () => {
+    const route = (await import("../../server/routes/inventory.mjs")).default;
+    prisma.procurementRequest.findUnique.mockResolvedValue({
+      id: "pr-1",
+      materialId: "mat-2",
+      supplierId: "sup-1",
+      note: "Urgent yarn",
+      requestedQty: 2400,
+      material: { id: "mat-2", sku: "Y002", name: "Acrylic Yarn", uom: "Kg", supplierId: "sup-1" },
+      supplier: { id: "sup-1", name: "Nahar" },
+    });
+    prisma.supplierPurchaseOrder.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ poNumber: "SPO-2401" });
+    prisma.supplierPurchaseOrder.create.mockResolvedValue({
+      id: "spo-2",
+      poNumber: "SPO-2402",
+      procurementRequestId: "pr-1",
+      supplierId: "sup-1",
+      supplier: { name: "Nahar" },
+      status: "ISSUED",
+      expectedDate: new Date("2026-05-20T00:00:00.000Z"),
+      note: "Urgent yarn",
+      lines: [
+        {
+          id: "line-1",
+          materialId: "mat-2",
+          requestedQty: "2400.00",
+          orderedQty: "2500.00",
+          receivedQty: "0.00",
+          uom: "Kg",
+          material: { sku: "Y002", name: "Acrylic Yarn" },
+        },
+      ],
+      receipts: [],
+    });
+    prisma.procurementRequest.update.mockResolvedValue({});
+
+    const { res } = await invokeRoute(route, "post", "/purchase-orders", {
+      body: {
+        procurementRequestId: "pr-1",
+        orderedQty: 2500,
+        expectedDate: "2026-05-20",
+        note: "Urgent yarn",
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(prisma.supplierPurchaseOrder.create).toHaveBeenCalled();
+    expect(prisma.procurementRequest.update).toHaveBeenCalledWith({
+      where: { id: "pr-1" },
+      data: { status: "IN_PROGRESS" },
+    });
+    expect(writeAuditLog).toHaveBeenCalled();
+  });
+
+  it("receives supplier goods and updates stock", async () => {
+    const route = (await import("../../server/routes/inventory.mjs")).default;
+    prisma.supplierPurchaseOrder.findUnique.mockResolvedValue({
+      id: "spo-1",
+      procurementRequestId: "pr-1",
+      lines: [
+        {
+          id: "pol-1",
+          materialId: "mat-2",
+          orderedQty: "2500.00",
+          receivedQty: "1000.00",
+          material: { id: "mat-2", stockQty: "400.00" },
+        },
+      ],
+      supplier: { name: "Nahar" },
+      receipts: [],
+    });
+    prisma.goodsReceipt.findFirst.mockResolvedValue({ receiptNumber: "GRN-2401" });
+    prisma.goodsReceipt.create.mockResolvedValue({
+      id: "grn-2",
+      receiptNumber: "GRN-2402",
+    });
+    prisma.goodsReceiptLine.create.mockResolvedValue({ id: "grnl-1" });
+    prisma.supplierPurchaseOrderLine.update.mockResolvedValue({
+      id: "pol-1",
+      orderedQty: "2500.00",
+      receivedQty: "2500.00",
+    });
+    prisma.material.update.mockResolvedValue({});
+    prisma.supplierPurchaseOrder.update.mockResolvedValue({});
+    prisma.procurementRequest.update.mockResolvedValue({});
+
+    const { res } = await invokeRoute(route, "post", "/goods-receipts", {
+      body: {
+        purchaseOrderId: "spo-1",
+        receivedQty: 1500,
+        receivedAt: "2026-05-21",
+        note: "Delivered",
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(prisma.goodsReceipt.create).toHaveBeenCalled();
+    expect(prisma.material.update).toHaveBeenCalledWith({
+      where: { id: "mat-2" },
+      data: { stockQty: "1900.00" },
+    });
+    expect(prisma.supplierPurchaseOrder.update).toHaveBeenCalledWith({
+      where: { id: "spo-1" },
+      data: { status: "RECEIVED" },
+    });
+    expect(prisma.procurementRequest.update).toHaveBeenCalledWith({
+      where: { id: "pr-1" },
+      data: { status: "CLOSED" },
+    });
     expect(writeAuditLog).toHaveBeenCalled();
   });
 });

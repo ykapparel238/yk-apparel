@@ -33,6 +33,7 @@ export default function OrderDetail() {
   const colorBreakdown = orderQuery.data.colors;
   const bom = orderQuery.data.bom;
   const orderChallans = orderQuery.data.challans;
+  const techPack = orderQuery.data.techPack;
   const productionStages = productionStagesQuery.data?.items ?? [];
 
   return (
@@ -71,7 +72,12 @@ export default function OrderDetail() {
             <Button variant="outline" size="sm" className="h-9">
               <Printer className="h-3.5 w-3.5 mr-1.5" /> Print
             </Button>
-            <Button variant="outline" size="sm" className="h-9">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => document.getElementById("tech-pack-section")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            >
               <Download className="h-3.5 w-3.5 mr-1.5" /> Tech Pack
             </Button>
             <Button size="sm" className="h-9">
@@ -199,6 +205,129 @@ export default function OrderDetail() {
           </ol>
         </div>
       </div>
+
+      {techPack && (
+        <div id="tech-pack-section" className="bg-card border border-border rounded-lg overflow-hidden mb-6">
+          <div className="p-5 border-b border-border">
+            <h3 className="text-sm font-semibold">Tech Pack</h3>
+            <p className="text-xs text-muted-foreground">
+              Style assets, approved samples, measurements, and thread references for this order.
+            </p>
+          </div>
+          <div className="grid gap-4 p-5 lg:grid-cols-2">
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Assets</h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {techPack.assets.map((asset) => (
+                    <div key={asset.id} className="rounded-md border border-border p-3 text-xs">
+                      <p className="font-medium truncate">{asset.fileName}</p>
+                      <p className="text-muted-foreground">{asset.kind.replaceAll("_", " ")}</p>
+                      {asset.mimeType.startsWith("image/") && (
+                        <img src={asset.url} alt={asset.fileName} className="mt-3 h-28 w-full rounded-md border border-border object-cover" />
+                      )}
+                      <a href={asset.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-primary underline-offset-4 hover:underline">
+                        Open asset
+                      </a>
+                    </div>
+                  ))}
+                  {!techPack.assets.length && (
+                    <div className="rounded-md border border-dashed border-border p-4 text-xs text-muted-foreground">
+                      No sample images or tech-pack attachments linked yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Samples</h4>
+                <div className="space-y-2">
+                  {techPack.samples.map((sample) => (
+                    <div key={sample.id} className="rounded-md border border-border p-3 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{sample.sampleType.replaceAll("_", " ")}</span>
+                        <span className="text-muted-foreground">{sample.status}</span>
+                      </div>
+                      <p className="mt-2 text-muted-foreground">{sample.notes || "No notes provided."}</p>
+                    </div>
+                  ))}
+                  {!techPack.samples.length && <p className="text-xs text-muted-foreground">No sample specs recorded yet.</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Colourways</h4>
+                <div className="space-y-2">
+                  {techPack.colorways.map((color) => (
+                    <div key={`${color.id ?? color.name}`} className="flex items-start gap-3 rounded-md border border-border p-3 text-xs">
+                      <span className="mt-0.5 h-4 w-4 rounded border border-border shrink-0" style={{ backgroundColor: color.hexCode || "#ffffff" }} />
+                      <div className="min-w-0">
+                        <p className="font-medium">{color.name}</p>
+                        <p className="text-muted-foreground">
+                          {color.pantoneCode || "No pantone"} • {color.threadCode || "No thread code"}
+                        </p>
+                        {color.notes ? <p className="text-muted-foreground mt-1">{color.notes}</p> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Thread Specs</h4>
+                <div className="space-y-2">
+                  {techPack.threadSpecs.map((spec) => (
+                    <div key={`${spec.id ?? spec.materialName}-${spec.sortOrder}`} className="rounded-md border border-border p-3 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{spec.materialName}</span>
+                        <span className="text-muted-foreground">{spec.countSpec}</span>
+                      </div>
+                      <p className="mt-1 text-muted-foreground">
+                        {spec.colorRef || "No colour ref"}{spec.processNotes ? ` • ${spec.processNotes}` : ""}
+                      </p>
+                    </div>
+                  ))}
+                  {!techPack.threadSpecs.length && <p className="text-xs text-muted-foreground">No thread specs added yet.</p>}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border p-5">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Measurement Chart</h4>
+            {techPack.measurements.length ? (
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <tr className="text-left">
+                    <th className="px-3 py-2 font-semibold">Size</th>
+                    <th className="px-3 py-2 font-semibold">Point</th>
+                    <th className="px-3 py-2 font-semibold text-right">Target</th>
+                    <th className="px-3 py-2 font-semibold text-right">+ Tol</th>
+                    <th className="px-3 py-2 font-semibold text-right">- Tol</th>
+                    <th className="px-3 py-2 font-semibold">Unit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {techPack.measurements.map((measurement, index) => (
+                    <tr key={`${measurement.id ?? measurement.measurementPoint}-${index}`} className="data-table-row">
+                      <td className="px-3 py-2 text-xs font-medium">{measurement.sizeLabel}</td>
+                      <td className="px-3 py-2 text-xs">{measurement.measurementPoint}</td>
+                      <td className="px-3 py-2 text-right font-mono-num text-xs">{measurement.targetValue}</td>
+                      <td className="px-3 py-2 text-right font-mono-num text-xs">{measurement.tolerancePlus}</td>
+                      <td className="px-3 py-2 text-right font-mono-num text-xs">{measurement.toleranceMinus}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{measurement.unit}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-xs text-muted-foreground">No measurement chart has been uploaded for this style yet.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* BOM */}
       <div className="bg-card border border-border rounded-lg overflow-hidden mb-6">

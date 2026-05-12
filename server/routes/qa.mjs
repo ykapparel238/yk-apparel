@@ -20,6 +20,18 @@ const inspectionSchema = z.object({
   defects: z.array(z.object({ defectTypeId: z.string().min(1), count: z.coerce.number().int().positive() })).default([]),
 });
 
+const capaSchema = z.object({
+  inspectionId: z.string().optional().nullable(),
+  vendorId: z.string().optional().nullable(),
+  orderId: z.string().optional().nullable(),
+  lineId: z.string().optional().nullable(),
+  title: z.string().min(3),
+  rootCause: z.string().min(3),
+  ownerName: z.string().min(2),
+  dueDate: z.string().min(1),
+  status: z.enum(["OPEN", "IN_PROGRESS", "CLOSED"]).default("OPEN"),
+});
+
 function mapStage(value) {
   return value
     .toLowerCase()
@@ -43,7 +55,7 @@ function validateInspectionPayload(data) {
 }
 
 async function buildQaPayload() {
-  const [inspections, vendors, defects, orders, lines, defectTypes] = await Promise.all([
+  const [inspections, vendors, defects, orders, lines, defectTypes, capas] = await Promise.all([
     prisma.qaInspection.findMany({
       orderBy: { inspectedAt: "desc" },
       include: {
@@ -76,6 +88,15 @@ async function buildQaPayload() {
     prisma.qaDefectType.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
+    }),
+    prisma.correctiveAction.findMany({
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      include: {
+        inspection: { select: { id: true } },
+        vendor: { select: { id: true, name: true } },
+        order: { select: { id: true, poNumber: true } },
+        line: { select: { id: true, name: true } },
+      },
     }),
   ]);
 
@@ -115,6 +136,7 @@ async function buildQaPayload() {
       quality: vendor.weeklyMetrics.length
         ? Math.round(vendor.weeklyMetrics.reduce((sum, metric) => sum + metric.qualityPct, 0) / vendor.weeklyMetrics.length)
         : 0,
+      openCapaCount: capas.filter((item) => item.vendorId === vendor.id && item.status !== "CLOSED").length,
     })),
     inspections: inspections.map((inspection) => ({
       id: inspection.id,
@@ -139,6 +161,21 @@ async function buildQaPayload() {
     orderOptions: orders,
     lineOptions: lines,
     defectTypes,
+    capaItems: capas.map((item) => ({
+      id: item.id,
+      inspectionId: item.inspectionId ?? null,
+      vendorId: item.vendorId ?? null,
+      vendorName: item.vendor?.name ?? null,
+      orderId: item.orderId ?? null,
+      orderPo: item.order?.poNumber ?? null,
+      lineId: item.lineId ?? null,
+      lineName: item.line?.name ?? null,
+      title: item.title,
+      rootCause: item.rootCause,
+      ownerName: item.ownerName,
+      dueDate: item.dueDate.toISOString().slice(0, 10),
+      status: item.status,
+    })),
   };
 }
 
@@ -268,6 +305,95 @@ router.patch(
     });
 
     return ok(res, { item: { id: inspection.id } });
+  }),
+);
+
+router.get("/capa", asyncHandler(async (_req, res) => {
+  const payload = await buildQaPayload();
+  return ok(res, { items: payload.capaItems });
+}));
+
+router.post(
+  "/capa",
+  requireRoles("ADMIN", "QA_MANAGER"),
+  asyncHandler(async (req, res) => {
+    const parsed = capaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return fail(res, 400, "Invalid CAPA payload", "INVALID_CAPA_PAYLOAD", parsed.error.flatten());
+    }
+    const dueDate = new Date(parsed.data.dueDate);
+    if (Number.isNaN(dueDate.getTime())) {
+      return fail(res, 400, "Invalid CAPA due date", "INVALID_CAPA_DATE");
+    }
+
+    const item = await prisma.correctiveAction.create({
+      data: {
+        inspectionId: parsed.data.inspectionId || null,
+        vendorId: parsed.data.vendorId || null,
+        orderId: parsed.data.orderId || null,
+        lineId: parsed.data.lineId || null,
+        title: parsed.data.title.trim(),
+        rootCause: parsed.data.rootCause.trim(),
+        ownerName: parsed.data.ownerName.trim(),
+        dueDate,
+        status: parsed.data.status,
+      },
+    });
+
+    await writeAuditLog(req, {
+      module: "QA",
+      action: "Created CAPA",
+      targetType: "CorrectiveAction",
+      targetId: item.id,
+      targetLabel: item.title,
+    });
+
+    return ok(res, { item: { id: item.id } }, 201);
+  }),
+);
+
+router.patch(
+  "/capa/:id",
+  requireRoles("ADMIN", "QA_MANAGER"),
+  asyncHandler(async (req, res) => {
+    const parsed = capaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return fail(res, 400, "Invalid CAPA payload", "INVALID_CAPA_PAYLOAD", parsed.error.flatten());
+    }
+    const dueDate = new Date(parsed.data.dueDate);
+    if (Number.isNaN(dueDate.getTime())) {
+      return fail(res, 400, "Invalid CAPA due date", "INVALID_CAPA_DATE");
+    }
+
+    const existing = await prisma.correctiveAction.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      return fail(res, 404, "CAPA not found", "CAPA_NOT_FOUND");
+    }
+
+    const item = await prisma.correctiveAction.update({
+      where: { id: req.params.id },
+      data: {
+        inspectionId: parsed.data.inspectionId || null,
+        vendorId: parsed.data.vendorId || null,
+        orderId: parsed.data.orderId || null,
+        lineId: parsed.data.lineId || null,
+        title: parsed.data.title.trim(),
+        rootCause: parsed.data.rootCause.trim(),
+        ownerName: parsed.data.ownerName.trim(),
+        dueDate,
+        status: parsed.data.status,
+      },
+    });
+
+    await writeAuditLog(req, {
+      module: "QA",
+      action: "Updated CAPA",
+      targetType: "CorrectiveAction",
+      targetId: item.id,
+      targetLabel: item.title,
+    });
+
+    return ok(res, { item: { id: item.id } });
   }),
 );
 

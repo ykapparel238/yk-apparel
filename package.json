@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "test:desktop:integration": "vitest run src/lib/desktopBridge.test.ts src/test/sync-route.test.ts",
     "verify:production": "node scripts/production-smoke.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "node prisma/seed.mjs",

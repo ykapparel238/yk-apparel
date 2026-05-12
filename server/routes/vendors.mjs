@@ -83,6 +83,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
         orderBy: { weekStartDate: "asc" },
       },
       qaInspections: true,
+      correctiveActions: true,
     },
   });
 
@@ -107,6 +108,8 @@ router.get("/:id", asyncHandler(async (req, res) => {
           vendor.qaInspections.length,
       )
     : summary.quality;
+  const openCapaCount = vendor.correctiveActions.filter((item) => item.status !== "CLOSED").length;
+  const qualityRisk = openCapaCount >= 3 || qaPassRate < 92 ? "High" : openCapaCount > 0 || qaPassRate < 96 ? "Medium" : "Low";
 
   const openOrders = await prisma.purchaseOrder.findMany({
     where: {
@@ -131,7 +134,10 @@ router.get("/:id", asyncHandler(async (req, res) => {
       { k: "Capacity Utilisation", v: utilisation },
       { k: "Challan Closure", v: challanClosure },
       { k: "Weekly Throughput", v: avgThroughput },
+      { k: "Open CAPA", v: Math.min(openCapaCount * 10, 100) },
     ],
+    openCapaCount,
+    qualityRisk,
     challans: vendor.challans.map((challan) => ({
       id: challan.id,
       challanNumber: challan.challanNumber,

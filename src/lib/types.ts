@@ -69,6 +69,7 @@ export type OrderDetailPayload = {
     rejected: number;
     status: string;
   }>;
+  techPack?: StyleTechPackPayload;
 };
 
 export type PlanningLine = {
@@ -138,6 +139,33 @@ export type ProductionLine = {
   status: string;
 };
 
+export type ProductionEntryItem = {
+  id: string;
+  metricDate: string;
+  lineId: string;
+  lineName: string;
+  orderId?: string | null;
+  poNumber?: string | null;
+  shiftId?: string | null;
+  shiftName?: string | null;
+  stage: string;
+  plannedQty: number;
+  actualQty: number;
+  rejectedQty: number;
+  downtimeMinutes: number;
+  downtimeReasonId?: string | null;
+  downtimeReason?: string | null;
+  remarks: string;
+};
+
+export type ProductionEntriesPayload = {
+  items: ProductionEntryItem[];
+  downtimeReasons: Array<{ id: string; code: string; label: string }>;
+  shifts: Array<{ id: string; name: string }>;
+  orders: Array<{ id: string; poNumber: string }>;
+  lines: Array<{ id: string; name: string }>;
+};
+
 export type MasterBrand = {
   id: string;
   code: string;
@@ -176,8 +204,82 @@ export type MasterStyle = {
   yarn: string;
   sizes: string[];
   colors: number;
-  colorItems?: Array<{ name: string; hexCode?: string | null }>;
+  colorItems?: Array<{
+    name: string;
+    hexCode?: string | null;
+    pantoneCode?: string;
+    threadCode?: string;
+    notes?: string;
+  }>;
   inUse?: boolean;
+  sampleImageUrl?: string | null;
+  assetCount?: number;
+  sampleStatus?: string | null;
+  measurementCount?: number;
+  threadSpecCount?: number;
+};
+
+export type FileAssetItem = {
+  id: string;
+  entityType: "STYLE" | "STYLE_SAMPLE" | "ORDER";
+  entityId: string;
+  kind: "SAMPLE_IMAGE" | "REFERENCE_IMAGE" | "TECH_PACK" | "ATTACHMENT";
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  url: string;
+  createdAt: string;
+};
+
+export type StyleSampleItem = {
+  id: string;
+  sampleType: "PROTO" | "FIT" | "SIZE_SET" | "PP" | "SHIPMENT";
+  status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVISED";
+  notes: string;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  assets: FileAssetItem[];
+};
+
+export type StyleMeasurementSpecItem = {
+  id?: string;
+  sizeLabel: string;
+  measurementPoint: string;
+  targetValue: number;
+  tolerancePlus: number;
+  toleranceMinus: number;
+  unit: string;
+};
+
+export type StyleThreadSpecItem = {
+  id?: string;
+  materialName: string;
+  countSpec: string;
+  colorRef: string;
+  supplierId?: string | null;
+  materialId?: string | null;
+  processNotes: string;
+  sortOrder: number;
+};
+
+export type StyleColorwayItem = {
+  id?: string;
+  name: string;
+  hexCode?: string | null;
+  pantoneCode?: string;
+  threadCode?: string;
+  notes?: string;
+};
+
+export type StyleTechPackPayload = {
+  styleId: string;
+  assets: FileAssetItem[];
+  samples: StyleSampleItem[];
+  measurements: StyleMeasurementSpecItem[];
+  threadSpecs: StyleThreadSpecItem[];
+  colorways: StyleColorwayItem[];
 };
 
 export type MasterMaterial = {
@@ -240,6 +342,8 @@ export type VendorListItem = {
 export type VendorDetailPayload = {
   item: VendorListItem;
   utilisation: number;
+  openCapaCount?: number;
+  qualityRisk?: string;
   trend: Array<{
     wk: string;
     otd: number;
@@ -285,6 +389,7 @@ export type InventoryItem = {
 export type InventoryPayload = {
   items: InventoryItem[];
   lowStockCount: number;
+  purchaseOrders?: ProcurementPurchaseOrderItem[];
 };
 
 export type ProcurementRequestItem = {
@@ -306,6 +411,30 @@ export type ProcurementRequestsPayload = {
   items: ProcurementRequestItem[];
 };
 
+export type ProcurementPurchaseOrderItem = {
+  id: string;
+  poNumber: string;
+  procurementRequestId?: string | null;
+  supplierId: string;
+  supplier: string;
+  materialId?: string | null;
+  material?: string | null;
+  sku?: string | null;
+  requestedQty: number;
+  orderedQty: number;
+  receivedQty: number;
+  balanceQty: number;
+  uom: string;
+  status: string;
+  expectedDate?: string | null;
+  note: string;
+  receipts: number;
+};
+
+export type ProcurementPurchaseOrdersPayload = {
+  items: ProcurementPurchaseOrderItem[];
+};
+
 export type QaPayload = {
   summary: {
     checked: number;
@@ -323,6 +452,7 @@ export type QaPayload = {
     name: string;
     process: string;
     quality: number;
+    openCapaCount?: number;
   }>;
   inspections: Array<{
     id: string;
@@ -344,6 +474,21 @@ export type QaPayload = {
   orderOptions: Array<{ id: string; poNumber: string }>;
   lineOptions: Array<{ id: string; name: string }>;
   defectTypes: Array<{ id: string; name: string }>;
+  capaItems: Array<{
+    id: string;
+    inspectionId?: string | null;
+    vendorId?: string | null;
+    vendorName?: string | null;
+    orderId?: string | null;
+    orderPo?: string | null;
+    lineId?: string | null;
+    lineName?: string | null;
+    title: string;
+    rootCause: string;
+    ownerName: string;
+    dueDate: string;
+    status: "OPEN" | "IN_PROGRESS" | "CLOSED";
+  }>;
 };
 
 export type DispatchItem = {

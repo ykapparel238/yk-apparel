@@ -26,8 +26,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createInventoryAdjustment, createProcurementRequest, fetchInventory, fetchProcurementRequests, updateProcurementRequest } from "@/lib/services";
-import type { InventoryItem, ProcurementRequestItem } from "@/lib/types";
+import {
+  createGoodsReceipt,
+  createInventoryAdjustment,
+  createProcurementRequest,
+  createSupplierPurchaseOrder,
+  fetchInventory,
+  fetchProcurementPurchaseOrders,
+  fetchProcurementRequests,
+  updateProcurementRequest,
+  updateSupplierPurchaseOrder,
+} from "@/lib/services";
+import type { InventoryItem, ProcurementPurchaseOrderItem, ProcurementRequestItem } from "@/lib/types";
 import { useForm } from "react-hook-form";
 import { AlertTriangle, Pencil, ShoppingCart } from "lucide-react";
 import { useState } from "react";
@@ -43,9 +53,22 @@ const procurementSchema = z.object({
   note: z.string().min(2, "Enter a reason"),
   status: z.enum(["OPEN", "IN_PROGRESS", "CLOSED"]).default("OPEN"),
 });
+const supplierPoSchema = z.object({
+  orderedQty: z.coerce.number().positive("Enter a valid quantity"),
+  expectedDate: z.string().optional(),
+  note: z.string().min(2, "Enter a note"),
+  status: z.enum(["DRAFT", "ISSUED", "PARTIAL_RECEIVED", "RECEIVED", "CANCELLED"]).default("ISSUED"),
+});
+const receiptSchema = z.object({
+  receivedQty: z.coerce.number().positive("Enter a valid quantity"),
+  receivedAt: z.string().min(1, "Select a date"),
+  note: z.string().min(2, "Enter a note"),
+});
 
 type AdjustmentInput = z.infer<typeof adjustmentSchema>;
 type ProcurementInput = z.infer<typeof procurementSchema>;
+type SupplierPoInput = z.infer<typeof supplierPoSchema>;
+type ReceiptInput = z.infer<typeof receiptSchema>;
 
 export default function Inventory() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
@@ -53,6 +76,9 @@ export default function Inventory() {
   const [target, setTarget] = useState<InventoryItem | null>(null);
   const [procurementTarget, setProcurementTarget] = useState<InventoryItem | null>(null);
   const [editingProcurement, setEditingProcurement] = useState<ProcurementRequestItem | null>(null);
+  const [purchaseOrderTarget, setPurchaseOrderTarget] = useState<ProcurementRequestItem | null>(null);
+  const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<ProcurementPurchaseOrderItem | null>(null);
+  const [receiptTarget, setReceiptTarget] = useState<ProcurementPurchaseOrderItem | null>(null);
   const inventoryQuery = useQuery({
     queryKey: ["inventory"],
     queryFn: fetchInventory,
@@ -60,6 +86,10 @@ export default function Inventory() {
   const procurementQuery = useQuery({
     queryKey: ["procurement-requests"],
     queryFn: fetchProcurementRequests,
+  });
+  const purchaseOrdersQuery = useQuery({
+    queryKey: ["procurement-purchase-orders"],
+    queryFn: fetchProcurementPurchaseOrders,
   });
 
   const form = useForm<AdjustmentInput>({
@@ -69,6 +99,14 @@ export default function Inventory() {
   const procurementForm = useForm<ProcurementInput>({
     resolver: zodResolver(procurementSchema),
     defaultValues: { requestedQty: undefined, note: "", status: "OPEN" },
+  });
+  const supplierPoForm = useForm<SupplierPoInput>({
+    resolver: zodResolver(supplierPoSchema),
+    defaultValues: { orderedQty: undefined, expectedDate: "", note: "", status: "ISSUED" },
+  });
+  const receiptForm = useForm<ReceiptInput>({
+    resolver: zodResolver(receiptSchema),
+    defaultValues: { receivedQty: undefined, receivedAt: "", note: "" },
   });
 
   const adjustmentMutation = useMutation({
@@ -119,18 +157,72 @@ export default function Inventory() {
       });
     },
   });
+  const purchaseOrderMutation = useMutation({
+    mutationFn: (values: SupplierPoInput) => {
+      if (editingPurchaseOrder) {
+        return updateSupplierPurchaseOrder(editingPurchaseOrder.id, values);
+      }
+      return createSupplierPurchaseOrder({
+        procurementRequestId: purchaseOrderTarget!.id,
+        orderedQty: values.orderedQty,
+        expectedDate: values.expectedDate || null,
+        note: values.note,
+      });
+    },
+    onSuccess: async () => {
+      toast.success(editingPurchaseOrder ? "Supplier PO updated" : "Supplier PO created");
+      setPurchaseOrderTarget(null);
+      setEditingPurchaseOrder(null);
+      supplierPoForm.reset({ orderedQty: undefined, expectedDate: "", note: "", status: "ISSUED" });
+      await queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-requests"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-purchase-orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+    onError: (error) => {
+      toast.error("Unable to save supplier PO", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    },
+  });
+  const receiptMutation = useMutation({
+    mutationFn: (values: ReceiptInput) => createGoodsReceipt({
+      purchaseOrderId: receiptTarget!.id,
+      receivedQty: values.receivedQty,
+      receivedAt: values.receivedAt,
+      note: values.note,
+    }),
+    onSuccess: async () => {
+      toast.success("Goods receipt posted", {
+        description: "Stock and PO receipt balance have been updated.",
+      });
+      setReceiptTarget(null);
+      receiptForm.reset({ receivedQty: undefined, receivedAt: "", note: "" });
+      await queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-purchase-orders"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-requests"] });
+      await queryClient.invalidateQueries({ queryKey: ["mrp"] });
+      await queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+    onError: (error) => {
+      toast.error("Unable to post goods receipt", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    },
+  });
 
-  if (inventoryQuery.isLoading || procurementQuery.isLoading) {
+  if (inventoryQuery.isLoading || procurementQuery.isLoading || purchaseOrdersQuery.isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground">Loading inventory...</div>;
   }
 
-  if (inventoryQuery.isError || !inventoryQuery.data || procurementQuery.isError || !procurementQuery.data) {
+  if (inventoryQuery.isError || !inventoryQuery.data || procurementQuery.isError || !procurementQuery.data || purchaseOrdersQuery.isError || !purchaseOrdersQuery.data) {
     return <div className="p-8 text-center text-sm text-destructive">Unable to load inventory.</div>;
   }
 
   const inventory = inventoryQuery.data.items;
   const low = inventoryQuery.data.lowStockCount;
   const procurementRequests = procurementQuery.data.items;
+  const purchaseOrders = purchaseOrdersQuery.data.items;
 
   const openProcurementDialog = (item: InventoryItem) => {
     setProcurementTarget(item);
@@ -150,6 +242,18 @@ export default function Inventory() {
       requestedQty: item.shortage || undefined,
       note: `Shortage action for ${item.name}`,
       status: "OPEN",
+    });
+  };
+
+  const openSupplierPoDialog = (request: ProcurementRequestItem) => {
+    setPurchaseOrderTarget(request);
+    const existing = purchaseOrders.find((item) => item.procurementRequestId === request.id && ["Draft", "Issued", "Partial Received"].includes(item.status)) ?? null;
+    setEditingPurchaseOrder(existing);
+    supplierPoForm.reset({
+      orderedQty: existing?.orderedQty ?? request.requestedQty,
+      expectedDate: existing?.expectedDate ?? "",
+      note: existing?.note ?? request.note,
+      status: existing?.status === "Received" ? "RECEIVED" : existing?.status === "Partial Received" ? "PARTIAL_RECEIVED" : existing?.status === "Cancelled" ? "CANCELLED" : existing?.status === "Draft" ? "DRAFT" : "ISSUED",
     });
   };
 
@@ -260,6 +364,7 @@ export default function Inventory() {
               <th className="px-4 py-3 font-semibold text-right">Requested</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               <th className="px-4 py-3 font-semibold">Created</th>
+              <th className="px-4 py-3 font-semibold w-28"></th>
             </tr>
           </thead>
           <tbody>
@@ -272,11 +377,80 @@ export default function Inventory() {
                 <td className="px-4 py-3 text-right font-mono-num">{fmt(request.requestedQty)}</td>
                 <td className="px-4 py-3 text-xs">{request.status}</td>
                 <td className="px-4 py-3 font-mono-num text-xs text-muted-foreground">{request.createdAt}</td>
+                <td className="px-2 py-3 text-right">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openSupplierPoDialog(request)}>
+                    {purchaseOrders.some((item) => item.procurementRequestId === request.id) ? "Update PO" : "Create PO"}
+                  </Button>
+                </td>
               </tr>
             )) : (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
                   No procurement requests created yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="bg-card border border-border rounded-lg overflow-hidden mt-4">
+        <div className="p-5 border-b border-border">
+          <h3 className="text-sm font-semibold">Supplier Purchase Orders</h3>
+          <p className="text-xs text-muted-foreground">Issued POs and goods receipt progress</p>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <tr className="text-left">
+              <th className="px-4 py-3 font-semibold">PO</th>
+              <th className="px-4 py-3 font-semibold">Supplier</th>
+              <th className="px-4 py-3 font-semibold">Material</th>
+              <th className="px-4 py-3 font-semibold text-right">Ordered</th>
+              <th className="px-4 py-3 font-semibold text-right">Received</th>
+              <th className="px-4 py-3 font-semibold text-right">Balance</th>
+              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold w-28"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchaseOrders.length ? purchaseOrders.map((po) => (
+              <tr key={po.id} className="data-table-row">
+                <td className="px-4 py-3 font-mono-num text-xs font-semibold text-primary">{po.poNumber}</td>
+                <td className="px-4 py-3 text-xs">{po.supplier}</td>
+                <td className="px-4 py-3 text-xs">{po.sku} — {po.material}</td>
+                <td className="px-4 py-3 text-right font-mono-num">{fmt(po.orderedQty)}</td>
+                <td className="px-4 py-3 text-right font-mono-num text-success">{fmt(po.receivedQty)}</td>
+                <td className="px-4 py-3 text-right font-mono-num text-warning">{fmt(po.balanceQty)}</td>
+                <td className="px-4 py-3 text-xs">{po.status}</td>
+                <td className="px-2 py-3 text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
+                      setEditingPurchaseOrder(po);
+                      setPurchaseOrderTarget(procurementRequests.find((item) => item.id === po.procurementRequestId) ?? null);
+                      supplierPoForm.reset({
+                        orderedQty: po.orderedQty,
+                        expectedDate: po.expectedDate ?? "",
+                        note: po.note,
+                        status: po.status === "Received" ? "RECEIVED" : po.status === "Partial Received" ? "PARTIAL_RECEIVED" : po.status === "Cancelled" ? "CANCELLED" : po.status === "Draft" ? "DRAFT" : "ISSUED",
+                      });
+                    }}>Edit</Button>
+                    {po.balanceQty > 0 ? (
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+                        setReceiptTarget(po);
+                        receiptForm.reset({
+                          receivedQty: po.balanceQty,
+                          receivedAt: new Date().toISOString().slice(0, 10),
+                          note: `Receipt for ${po.poNumber}`,
+                        });
+                      }}>Receive</Button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No supplier POs created yet.
                 </td>
               </tr>
             )}
@@ -407,6 +581,116 @@ export default function Inventory() {
                 </Button>
                 <Button type="submit" disabled={procurementMutation.isPending}>
                   {procurementMutation.isPending ? "Saving..." : editingProcurement ? "Save Request" : "Create Request"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(purchaseOrderTarget || editingPurchaseOrder)} onOpenChange={(open) => {
+        if (!open) {
+          setPurchaseOrderTarget(null);
+          setEditingPurchaseOrder(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingPurchaseOrder ? "Update Supplier PO" : "Create Supplier PO"}</DialogTitle>
+            <DialogDescription>
+              {purchaseOrderTarget ? `Issue supplier purchase order for ${purchaseOrderTarget.material}.` : "Issue supplier purchase order."}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...supplierPoForm}>
+            <form onSubmit={supplierPoForm.handleSubmit((values) => purchaseOrderMutation.mutate(values))} className="space-y-4">
+              <FormField control={supplierPoForm.control} name="orderedQty" render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-medium">Ordered Qty</FormLabel>
+                  <FormControl><Input type="number" {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
+                </FormItem>
+              )} />
+              <FormField control={supplierPoForm.control} name="expectedDate" render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-medium">Expected Date</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
+                </FormItem>
+              )} />
+              <FormField control={supplierPoForm.control} name="note" render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-medium">Note</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
+                </FormItem>
+              )} />
+              {editingPurchaseOrder ? (
+                <FormField control={supplierPoForm.control} name="status" render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Status</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="DRAFT">Draft</SelectItem>
+                        <SelectItem value="ISSUED">Issued</SelectItem>
+                        <SelectItem value="PARTIAL_RECEIVED">Partial Received</SelectItem>
+                        <SelectItem value="RECEIVED">Received</SelectItem>
+                        <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+              ) : null}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => {
+                  setPurchaseOrderTarget(null);
+                  setEditingPurchaseOrder(null);
+                }}>Cancel</Button>
+                <Button type="submit" disabled={purchaseOrderMutation.isPending}>
+                  {purchaseOrderMutation.isPending ? "Saving..." : editingPurchaseOrder ? "Save PO" : "Create PO"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(receiptTarget)} onOpenChange={(open) => !open && setReceiptTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Post Goods Receipt</DialogTitle>
+            <DialogDescription>
+              {receiptTarget ? `Receive material against ${receiptTarget.poNumber}.` : "Receive material."}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...receiptForm}>
+            <form onSubmit={receiptForm.handleSubmit((values) => receiptMutation.mutate(values))} className="space-y-4">
+              <FormField control={receiptForm.control} name="receivedQty" render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-medium">Received Qty</FormLabel>
+                  <FormControl><Input type="number" {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
+                </FormItem>
+              )} />
+              <FormField control={receiptForm.control} name="receivedAt" render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-medium">Receipt Date</FormLabel>
+                  <FormControl><Input type="date" {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
+                </FormItem>
+              )} />
+              <FormField control={receiptForm.control} name="note" render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-medium">Note</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage className="text-[11px]" />
+                </FormItem>
+              )} />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setReceiptTarget(null)}>Cancel</Button>
+                <Button type="submit" disabled={receiptMutation.isPending}>
+                  {receiptMutation.isPending ? "Posting..." : "Post Receipt"}
                 </Button>
               </DialogFooter>
             </form>

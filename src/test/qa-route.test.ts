@@ -24,6 +24,12 @@ const prisma = {
   qaDefectType: {
     findMany: vi.fn(),
   },
+  correctiveAction: {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
   $transaction: vi.fn(),
 };
 
@@ -214,6 +220,7 @@ describe("qa route", () => {
     prisma.purchaseOrder.findMany.mockResolvedValue([{ id: "ord-1", poNumber: "PO-1" }]);
     prisma.productionLine.findMany.mockResolvedValue([{ id: "line-1", name: "Line 1" }]);
     prisma.qaDefectType.findMany.mockResolvedValue([{ id: "def-1", name: "Shade Variation" }]);
+    prisma.correctiveAction.findMany.mockResolvedValue([]);
 
     const { res } = await invokeRoute(route, "get", "/");
 
@@ -225,5 +232,53 @@ describe("qa route", () => {
       orderPo: "PO-1",
       vendorName: "Vendor A",
     });
+  });
+
+  it("creates CAPA items and writes audit logs", async () => {
+    const route = (await import("../../server/routes/qa.mjs")).default;
+    prisma.correctiveAction.create.mockResolvedValue({ id: "capa-1", title: "Needle breakage review" });
+
+    const { res } = await invokeRoute(route, "post", "/capa", {
+      body: {
+        inspectionId: "ins-1",
+        vendorId: "ven-1",
+        orderId: "ord-1",
+        lineId: "line-1",
+        title: "Needle breakage review",
+        rootCause: "Loose calibration at setup",
+        ownerName: "Rohit",
+        dueDate: "2026-05-12",
+        status: "OPEN",
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(prisma.correctiveAction.create).toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ action: "Created CAPA" }));
+  });
+
+  it("updates CAPA items", async () => {
+    const route = (await import("../../server/routes/qa.mjs")).default;
+    prisma.correctiveAction.findUnique.mockResolvedValue({ id: "capa-1" });
+    prisma.correctiveAction.update.mockResolvedValue({ id: "capa-1", title: "Needle breakage review" });
+
+    const { res } = await invokeRoute(route, "patch", "/capa/:id", {
+      params: { id: "capa-1" },
+      body: {
+        inspectionId: "ins-1",
+        vendorId: "ven-1",
+        orderId: "ord-1",
+        lineId: "line-1",
+        title: "Needle breakage review",
+        rootCause: "Reset machine parameters",
+        ownerName: "Rohit",
+        dueDate: "2026-05-13",
+        status: "IN_PROGRESS",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.correctiveAction.update).toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ action: "Updated CAPA" }));
   });
 });

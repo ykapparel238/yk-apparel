@@ -463,6 +463,79 @@ async function getMrpRows() {
   return buildMrpItems(bomItems, materials, orders);
 }
 
+async function getProcurementRows() {
+  const rows = await prisma.supplierPurchaseOrder.findMany({
+    include: {
+      supplier: true,
+      procurementRequest: true,
+      lines: {
+        include: { material: true },
+      },
+      receipts: true,
+    },
+    orderBy: { orderDate: "desc" },
+  });
+  return rows.map((row) => ({
+    poNumber: row.poNumber,
+    supplier: row.supplier.name,
+    material: row.lines[0]?.material.name ?? "",
+    sku: row.lines[0]?.material.sku ?? "",
+    requestedQty: Number(row.lines[0]?.requestedQty ?? 0),
+    orderedQty: Number(row.lines[0]?.orderedQty ?? 0),
+    receivedQty: Number(row.lines[0]?.receivedQty ?? 0),
+    status: formatEnumLabel(row.status),
+    expectedDate: toDate(row.expectedDate),
+    receipts: row.receipts.length,
+  }));
+}
+
+async function getProductionEntryRows() {
+  const rows = await prisma.productionEntry.findMany({
+    include: {
+      line: true,
+      order: true,
+      shift: true,
+      downtimeReason: true,
+    },
+    orderBy: [{ metricDate: "desc" }, { createdAt: "desc" }],
+    take: 200,
+  });
+  return rows.map((row) => ({
+    metricDate: toDate(row.metricDate),
+    line: row.line.name,
+    orderPo: row.order?.poNumber ?? "",
+    shift: row.shift?.name ?? "",
+    stage: formatEnumLabel(row.stage),
+    plannedQty: row.plannedQty,
+    actualQty: row.actualQty,
+    rejectedQty: row.rejectedQty,
+    downtimeMinutes: row.downtimeMinutes,
+    downtimeReason: row.downtimeReason?.label ?? "",
+  }));
+}
+
+async function getCapaRows() {
+  const rows = await prisma.correctiveAction.findMany({
+    include: {
+      vendor: true,
+      order: true,
+      line: true,
+      inspection: true,
+    },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+  });
+  return rows.map((row) => ({
+    title: row.title,
+    vendor: row.vendor?.name ?? "",
+    orderPo: row.order?.poNumber ?? "",
+    line: row.line?.name ?? "",
+    ownerName: row.ownerName,
+    dueDate: toDate(row.dueDate),
+    status: formatEnumLabel(row.status),
+    inspectionDate: row.inspection ? toDate(row.inspection.inspectedAt) : "",
+  }));
+}
+
 async function getForecastRows() {
   const [bomItems, materials, orders, procurementRequests] = await Promise.all([
     prisma.billOfMaterialItem.findMany({
@@ -650,6 +723,27 @@ export const reportCatalog = [
     desc: "Required vs free stock and shortages by material",
     category: "Planning",
     rows: getMrpRows,
+  },
+  {
+    slug: "procurement-status-report",
+    name: "Procurement Status Report",
+    desc: "Supplier PO issue and receipt progress by material shortage action",
+    category: "Stores",
+    rows: getProcurementRows,
+  },
+  {
+    slug: "production-actuals-report",
+    name: "Production Actuals Report",
+    desc: "Shift-level actual vs plan, rejection, and downtime detail",
+    category: "Production",
+    rows: getProductionEntryRows,
+  },
+  {
+    slug: "capa-closure-report",
+    name: "CAPA Closure Report",
+    desc: "Corrective actions, owners, due dates, and closure status",
+    category: "QA",
+    rows: getCapaRows,
   },
   {
     slug: "forecast-and-wastage-model",

@@ -24,10 +24,13 @@ import type {
   MasterStyle,
   MasterSupplier,
   MasterVendor,
+  FileAssetItem,
   InventoryPayload,
   ProcurementRequestsPayload,
+  ProcurementPurchaseOrdersPayload,
   OrderDetailPayload,
   PlanningBoardPayload,
+  ProductionEntriesPayload,
   ProductionLine,
   ProductionStage,
   QaPayload,
@@ -36,6 +39,11 @@ import type {
   MrpPayload,
   ReportRowsPayload,
   SettingsPayload,
+  StyleColorwayItem,
+  StyleMeasurementSpecItem,
+  StyleSampleItem,
+  StyleTechPackPayload,
+  StyleThreadSpecItem,
   ReportsPayload,
   VendorDetailPayload,
   VendorListItem,
@@ -208,7 +216,14 @@ export async function fetchMastersOptions() {
   return api<{
     brands: Array<{ id: string; name: string; code: string }>;
     suppliers: Array<{ id: string; name: string; code: string }>;
-    styles: Array<{ id: string; code: string; name: string; brandId: string }>;
+    styles: Array<{
+      id: string;
+      code: string;
+      name: string;
+      brandId: string;
+      sizes?: string[];
+      colors?: Array<{ name: string; hexCode?: string | null }>;
+    }>;
     materials: Array<{ id: string; sku: string; name: string; supplierId?: string | null }>;
   }>("/api/masters/options");
 }
@@ -267,14 +282,30 @@ export async function deleteVendor(id: string) {
   return api<void>(`/api/masters/vendors/${id}`, { method: "DELETE" });
 }
 
-export async function createStyle(payload: { code: string; brandId: string; name: string; gauge: string; yarnDescription: string; sizes: string[]; colors: Array<{ name: string; hexCode?: string | null }> }) {
+export async function createStyle(payload: {
+  code: string;
+  brandId: string;
+  name: string;
+  gauge: string;
+  yarnDescription: string;
+  sizes: string[];
+  colors: Array<{ name: string; hexCode?: string | null; pantoneCode?: string; threadCode?: string; notes?: string }>;
+}) {
   return api<{ item: MasterStyle }>("/api/masters/styles", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export async function updateStyle(id: string, payload: { code: string; brandId: string; name: string; gauge: string; yarnDescription: string; sizes: string[]; colors: Array<{ name: string; hexCode?: string | null }> }) {
+export async function updateStyle(id: string, payload: {
+  code: string;
+  brandId: string;
+  name: string;
+  gauge: string;
+  yarnDescription: string;
+  sizes: string[];
+  colors: Array<{ name: string; hexCode?: string | null; pantoneCode?: string; threadCode?: string; notes?: string }>;
+}) {
   return api<{ item: MasterStyle }>(`/api/masters/styles/${id}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
@@ -283,6 +314,81 @@ export async function updateStyle(id: string, payload: { code: string; brandId: 
 
 export async function deleteStyle(id: string) {
   return api<void>(`/api/masters/styles/${id}`, { method: "DELETE" });
+}
+
+export async function uploadAsset(payload: {
+  entityType: "STYLE" | "STYLE_SAMPLE" | "ORDER";
+  entityId: string;
+  kind: "SAMPLE_IMAGE" | "REFERENCE_IMAGE" | "TECH_PACK" | "ATTACHMENT";
+  fileName: string;
+  mimeType: string;
+  dataBase64: string;
+}) {
+  return api<{ item: FileAssetItem }>("/api/assets", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAsset(id: string) {
+  return api<{ item: FileAssetItem }>(`/api/assets/${id}`);
+}
+
+export async function deleteAsset(id: string) {
+  return api<void>(`/api/assets/${id}`, { method: "DELETE" });
+}
+
+export async function fetchStyleTechPack(styleId: string) {
+  return api<StyleTechPackPayload>(`/api/masters/styles/${styleId}/tech-pack`);
+}
+
+export async function updateStyleTechPack(styleId: string, payload: {
+  measurements: StyleMeasurementSpecItem[];
+  threadSpecs: StyleThreadSpecItem[];
+  colorways: StyleColorwayItem[];
+}) {
+  return api<StyleTechPackPayload>(`/api/masters/styles/${styleId}/tech-pack`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createStyleSample(styleId: string, payload: {
+  sampleType: StyleSampleItem["sampleType"];
+  status: StyleSampleItem["status"];
+  notes?: string;
+  assetIds?: string[];
+}) {
+  return api<{ item: StyleSampleItem }>(`/api/masters/styles/${styleId}/samples`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateStyleSample(styleId: string, sampleId: string, payload: {
+  sampleType: StyleSampleItem["sampleType"];
+  status: StyleSampleItem["status"];
+  notes?: string;
+  assetIds?: string[];
+}) {
+  return api<{ item: StyleSampleItem }>(`/api/masters/styles/${styleId}/samples/${sampleId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function attachStyleAsset(styleId: string, payload: {
+  assetId: string;
+  kind?: FileAssetItem["kind"];
+}) {
+  return api<{ item: FileAssetItem }>(`/api/masters/styles/${styleId}/assets`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteStyleAsset(styleId: string, assetId: string) {
+  return api<void>(`/api/masters/styles/${styleId}/assets/${assetId}`, { method: "DELETE" });
 }
 
 export async function createMaterial(payload: {
@@ -444,6 +550,10 @@ export async function fetchProcurementRequests() {
   );
 }
 
+export async function fetchProcurementPurchaseOrders() {
+  return api<ProcurementPurchaseOrdersPayload>("/api/inventory/purchase-orders");
+}
+
 export async function createProcurementRequest(payload: { materialId: string; requestedQty: number; note: string }) {
   const inventory = await readDesktopSnapshot<InventoryPayload>(desktopResources.inventory);
   const item = inventory?.items.find((entry) => entry.materialId === payload.materialId) as (InventoryPayload["items"][number] & { syncVersion?: string }) | undefined;
@@ -480,12 +590,90 @@ export async function updateProcurementRequest(id: string, payload: { requestedQ
   );
 }
 
+export async function createSupplierPurchaseOrder(payload: {
+  procurementRequestId: string;
+  orderedQty: number;
+  expectedDate?: string | null;
+  note?: string | null;
+}) {
+  return api<{ item: ProcurementPurchaseOrdersPayload["items"][number] }>("/api/inventory/purchase-orders", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateSupplierPurchaseOrder(id: string, payload: {
+  orderedQty?: number;
+  expectedDate?: string | null;
+  note?: string | null;
+  status?: "DRAFT" | "ISSUED" | "PARTIAL_RECEIVED" | "RECEIVED" | "CANCELLED";
+}) {
+  return api<{ item: ProcurementPurchaseOrdersPayload["items"][number] }>(`/api/inventory/purchase-orders/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createGoodsReceipt(payload: {
+  purchaseOrderId: string;
+  receivedQty: number;
+  receivedAt: string;
+  note?: string | null;
+}) {
+  return api<{ item: { id: string; receiptNumber: string } }>("/api/inventory/goods-receipts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchQa() {
   return readDesktopOrRemote(
     desktopResources.qa,
     () => api<QaPayload>("/api/qa"),
     (payload) => ({ [desktopResources.qa]: payload }),
   );
+}
+
+export async function fetchProductionEntries() {
+  return api<ProductionEntriesPayload>("/api/production/entries");
+}
+
+export async function createProductionEntry(payload: {
+  metricDate: string;
+  lineId: string;
+  orderId?: string | null;
+  shiftId?: string | null;
+  stage: string;
+  plannedQty: number;
+  actualQty: number;
+  rejectedQty: number;
+  downtimeMinutes: number;
+  downtimeReasonId?: string | null;
+  remarks?: string | null;
+}) {
+  return api<{ item: ProductionEntriesPayload["items"][number] }>("/api/production/entries", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProductionEntry(id: string, payload: {
+  metricDate: string;
+  lineId: string;
+  orderId?: string | null;
+  shiftId?: string | null;
+  stage: string;
+  plannedQty: number;
+  actualQty: number;
+  rejectedQty: number;
+  downtimeMinutes: number;
+  downtimeReasonId?: string | null;
+  remarks?: string | null;
+}) {
+  return api<{ item: ProductionEntriesPayload["items"][number] }>(`/api/production/entries/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function createQaInspection(payload: {
@@ -542,6 +730,40 @@ export async function updateQaInspection(id: string, payload: {
       body: JSON.stringify(payload),
     }),
   );
+}
+
+export async function createCapa(payload: {
+  inspectionId?: string | null;
+  vendorId?: string | null;
+  orderId?: string | null;
+  lineId?: string | null;
+  title: string;
+  rootCause: string;
+  ownerName: string;
+  dueDate: string;
+  status: "OPEN" | "IN_PROGRESS" | "CLOSED";
+}) {
+  return api<{ item: { id: string } }>("/api/qa/capa", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCapa(id: string, payload: {
+  inspectionId?: string | null;
+  vendorId?: string | null;
+  orderId?: string | null;
+  lineId?: string | null;
+  title: string;
+  rootCause: string;
+  ownerName: string;
+  dueDate: string;
+  status: "OPEN" | "IN_PROGRESS" | "CLOSED";
+}) {
+  return api<{ item: { id: string } }>(`/api/qa/capa/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function fetchDispatch() {

@@ -169,6 +169,11 @@ export default function VendorDetail() {
         <Card label="Utilisation" value={`${utilisation}%`} />
       </div>
 
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <Card label="Open CAPA" value={String(vendorQuery.data.openCapaCount ?? 0)} />
+        <Card label="Quality Risk" value={vendorQuery.data.qualityRisk ?? "Low"} tone={vendorQuery.data.qualityRisk === "High" ? "warning" : "success"} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div className="lg:col-span-2 bg-card border border-border rounded-lg p-5">
           <h3 className="text-sm font-semibold mb-1">6-Week Performance Trend</h3>

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { writeAuditLog } from "../audit.mjs";
 import { prisma } from "../db.mjs";
 import { asyncHandler, fail, ok } from "../http.mjs";
+import { deleteAssetBinary } from "../storage.mjs";
+import { mapFileAsset, mapStyleTechPack, styleTechPackInclude } from "../style-tech-pack.mjs";
 
 const router = Router();
 
@@ -34,7 +36,52 @@ const styleSchema = z.object({
   gauge: z.string().min(2),
   yarnDescription: z.string().min(2),
   sizes: z.array(z.string().min(1)).min(1),
-  colors: z.array(z.object({ name: z.string().min(1), hexCode: z.string().optional().nullable() })).min(1),
+  colors: z.array(z.object({
+    name: z.string().min(1),
+    hexCode: z.string().optional().nullable(),
+    pantoneCode: z.string().optional().nullable(),
+    threadCode: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+  })).min(1),
+});
+
+const techPackPatchSchema = z.object({
+  measurements: z.array(z.object({
+    sizeLabel: z.string().min(1),
+    measurementPoint: z.string().min(1),
+    targetValue: z.coerce.number(),
+    tolerancePlus: z.coerce.number().min(0).default(0),
+    toleranceMinus: z.coerce.number().min(0).default(0),
+    unit: z.string().min(1),
+  })).default([]),
+  threadSpecs: z.array(z.object({
+    materialName: z.string().min(1),
+    countSpec: z.string().min(1),
+    colorRef: z.string().optional().nullable(),
+    supplierId: z.string().optional().nullable(),
+    materialId: z.string().optional().nullable(),
+    processNotes: z.string().optional().nullable(),
+    sortOrder: z.coerce.number().int().min(0).default(0),
+  })).default([]),
+  colorways: z.array(z.object({
+    name: z.string().min(1),
+    hexCode: z.string().optional().nullable(),
+    pantoneCode: z.string().optional().nullable(),
+    threadCode: z.string().optional().nullable(),
+    notes: z.string().optional().nullable(),
+  })).default([]),
+});
+
+const styleSampleSchema = z.object({
+  sampleType: z.enum(["PROTO", "FIT", "SIZE_SET", "PP", "SHIPMENT"]),
+  status: z.enum(["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "REVISED"]).default("DRAFT"),
+  notes: z.string().optional().nullable().default(""),
+  assetIds: z.array(z.string().min(1)).default([]),
+});
+
+const attachAssetSchema = z.object({
+  assetId: z.string().min(1),
+  kind: z.enum(["SAMPLE_IMAGE", "REFERENCE_IMAGE", "TECH_PACK", "ATTACHMENT"]).optional(),
 });
 
 const materialSchema = z.object({
@@ -90,6 +137,8 @@ export function mapMaterialType(value) {
 }
 
 function mapStyle(style) {
+  const sampleImage = style.assetSummary?.find((asset) => asset.kind === "SAMPLE_IMAGE");
+  const latestSample = style.samples?.[0] ?? null;
   return {
     id: style.id,
     code: style.code,
@@ -100,7 +149,18 @@ function mapStyle(style) {
     yarn: style.yarnDescription,
     sizes: style.sizes.map((size) => size.label),
     colors: style.colors.length,
-    colorItems: style.colors.map((color) => ({ name: color.name, hexCode: color.hexCode })),
+    colorItems: style.colors.map((color) => ({
+      name: color.name,
+      hexCode: color.hexCode,
+      pantoneCode: color.pantoneCode ?? "",
+      threadCode: color.threadCode ?? "",
+      notes: color.notes ?? "",
+    })),
+    sampleImageUrl: sampleImage ? `/uploads/${sampleImage.storagePath}` : null,
+    assetCount: style.assetSummary?.length ?? 0,
+    sampleStatus: latestSample?.status ?? null,
+    measurementCount: style.measurementSpecs?.length ?? 0,
+    threadSpecCount: style.threadSpecs?.length ?? 0,
   };
 }
 
@@ -147,7 +207,7 @@ function mapLine(line) {
 
 async function getMastersPayload(search = "") {
   const q = search.trim();
-  const [brands, suppliers, vendors, styles, orders, materials, bomItems, lines] = await Promise.all([
+  const [brands, suppliers, vendors, styles, styleAssets, orders, materials, bomItems, lines] = await Promise.all([
     prisma.brand.findMany({
       where: q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] } : undefined,
       orderBy: { name: "asc" },
@@ -193,7 +253,18 @@ async function getMastersPayload(search = "") {
         brand: true,
         sizes: { orderBy: { sortOrder: "asc" } },
         colors: { orderBy: { sortOrder: "asc" } },
+        samples: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+        measurementSpecs: { select: { id: true } },
+        threadSpecs: { select: { id: true } },
       },
+    }),
+    prisma.fileAsset.findMany({
+      where: { entityType: "STYLE" },
+      select: { entityId: true, kind: true, storagePath: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
     }),
     prisma.purchaseOrder.findMany({ select: { brandId: true, styleId: true } }),
     prisma.material.findMany({
@@ -238,9 +309,15 @@ async function getMastersPayload(search = "") {
 
   const activeOrdersByBrand = new Map();
   const stylesInUse = new Set();
+  const assetSummaryByStyle = new Map();
   orders.forEach((order) => {
     activeOrdersByBrand.set(order.brandId, (activeOrdersByBrand.get(order.brandId) ?? 0) + 1);
     stylesInUse.add(order.styleId);
+  });
+  styleAssets.forEach((asset) => {
+    const current = assetSummaryByStyle.get(asset.entityId) ?? [];
+    current.push(asset);
+    assetSummaryByStyle.set(asset.entityId, current);
   });
 
   return {
@@ -272,11 +349,36 @@ async function getMastersPayload(search = "") {
         status: formatVendorStatus(vendor.status),
       };
     }),
-    styles: styles.map((style) => ({ ...mapStyle(style), inUse: stylesInUse.has(style.id) })),
+    styles: styles.map((style) => ({
+      ...mapStyle({
+        ...style,
+        assetSummary: assetSummaryByStyle.get(style.id) ?? [],
+      }),
+      inUse: stylesInUse.has(style.id),
+    })),
     materials: materials.map(mapMaterial),
     bomItems: bomItems.map(mapBomItem),
     lines: lines.map(mapLine),
   };
+}
+
+async function fetchStyleTechPackById(styleId) {
+  const [style, assets] = await Promise.all([
+    prisma.style.findUnique({
+      where: { id: styleId },
+      include: styleTechPackInclude,
+    }),
+    prisma.fileAsset.findMany({
+      where: { entityType: "STYLE", entityId: styleId },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  if (!style) {
+    throw new Error("STYLE_NOT_FOUND");
+  }
+
+  return mapStyleTechPack(style, assets);
 }
 
 async function writeMasterAudit(req, tx, action, targetType, targetId, targetLabel) {
@@ -435,12 +537,24 @@ router.post("/styles", asyncHandler(async (req, res) => {
         gauge: parsed.data.gauge,
         yarnDescription: parsed.data.yarnDescription,
         sizes: { create: parsed.data.sizes.map((size, index) => ({ label: size, sortOrder: index + 1 })) },
-        colors: { create: parsed.data.colors.map((color, index) => ({ name: color.name, hexCode: color.hexCode || null, sortOrder: index + 1 })) },
+        colors: {
+          create: parsed.data.colors.map((color, index) => ({
+            name: color.name,
+            hexCode: color.hexCode || null,
+            pantoneCode: color.pantoneCode || null,
+            threadCode: color.threadCode || null,
+            notes: color.notes || null,
+            sortOrder: index + 1,
+          })),
+        },
       },
       include: {
         brand: true,
         sizes: { orderBy: { sortOrder: "asc" } },
         colors: { orderBy: { sortOrder: "asc" } },
+        samples: { orderBy: { createdAt: "desc" }, take: 1 },
+        measurementSpecs: { select: { id: true } },
+        threadSpecs: { select: { id: true } },
       },
     });
     await writeMasterAudit(req, tx, "CREATE", "Style", item.id, item.code);
@@ -464,12 +578,24 @@ router.patch("/styles/:id", asyncHandler(async (req, res) => {
         gauge: parsed.data.gauge,
         yarnDescription: parsed.data.yarnDescription,
         sizes: { create: parsed.data.sizes.map((size, index) => ({ label: size, sortOrder: index + 1 })) },
-        colors: { create: parsed.data.colors.map((color, index) => ({ name: color.name, hexCode: color.hexCode || null, sortOrder: index + 1 })) },
+        colors: {
+          create: parsed.data.colors.map((color, index) => ({
+            name: color.name,
+            hexCode: color.hexCode || null,
+            pantoneCode: color.pantoneCode || null,
+            threadCode: color.threadCode || null,
+            notes: color.notes || null,
+            sortOrder: index + 1,
+          })),
+        },
       },
       include: {
         brand: true,
         sizes: { orderBy: { sortOrder: "asc" } },
         colors: { orderBy: { sortOrder: "asc" } },
+        samples: { orderBy: { createdAt: "desc" }, take: 1 },
+        measurementSpecs: { select: { id: true } },
+        threadSpecs: { select: { id: true } },
       },
     });
     await writeMasterAudit(req, tx, "UPDATE", "Style", item.id, item.code);
@@ -489,6 +615,211 @@ router.delete("/styles/:id", asyncHandler(async (req, res) => {
     await tx.style.delete({ where: { id: req.params.id } });
     await writeMasterAudit(req, tx, "DELETE", "Style", style.id, style.code);
   });
+  return res.status(204).send();
+}));
+
+router.get("/styles/:id/tech-pack", asyncHandler(async (req, res) => {
+  const style = await prisma.style.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!style) {
+    return fail(res, 404, "Style not found", "STYLE_NOT_FOUND");
+  }
+
+  return ok(res, await fetchStyleTechPackById(req.params.id));
+}));
+
+router.patch("/styles/:id/tech-pack", asyncHandler(async (req, res) => {
+  const parsed = techPackPatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid tech pack payload", "INVALID_TECH_PACK_PAYLOAD", parsed.error.flatten());
+  }
+
+  const style = await prisma.style.findUnique({ where: { id: req.params.id } });
+  if (!style) {
+    return fail(res, 404, "Style not found", "STYLE_NOT_FOUND");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.styleMeasurementSpec.deleteMany({ where: { styleId: style.id } });
+    await tx.styleThreadSpec.deleteMany({ where: { styleId: style.id } });
+
+    if (parsed.data.measurements.length) {
+      await tx.styleMeasurementSpec.createMany({
+        data: parsed.data.measurements.map((item) => ({
+          styleId: style.id,
+          sizeLabel: item.sizeLabel,
+          measurementPoint: item.measurementPoint,
+          targetValue: item.targetValue.toFixed(2),
+          tolerancePlus: item.tolerancePlus.toFixed(2),
+          toleranceMinus: item.toleranceMinus.toFixed(2),
+          unit: item.unit,
+        })),
+      });
+    }
+
+    if (parsed.data.threadSpecs.length) {
+      await tx.styleThreadSpec.createMany({
+        data: parsed.data.threadSpecs.map((item, index) => ({
+          styleId: style.id,
+          materialName: item.materialName,
+          countSpec: item.countSpec,
+          colorRef: item.colorRef || null,
+          supplierId: item.supplierId || null,
+          materialId: item.materialId || null,
+          processNotes: item.processNotes || null,
+          sortOrder: item.sortOrder ?? index + 1,
+        })),
+      });
+    }
+
+    await tx.styleColor.deleteMany({
+      where: {
+        styleId: style.id,
+        name: {
+          notIn: parsed.data.colorways.map((color) => color.name),
+        },
+      },
+    });
+
+    await Promise.all(parsed.data.colorways.map((color, index) =>
+      tx.styleColor.upsert({
+        where: { styleId_name: { styleId: style.id, name: color.name } },
+        update: {
+          hexCode: color.hexCode || null,
+          pantoneCode: color.pantoneCode || null,
+          threadCode: color.threadCode || null,
+          notes: color.notes || null,
+          sortOrder: index + 1,
+        },
+        create: {
+          styleId: style.id,
+          name: color.name,
+          hexCode: color.hexCode || null,
+          pantoneCode: color.pantoneCode || null,
+          threadCode: color.threadCode || null,
+          notes: color.notes || null,
+          sortOrder: index + 1,
+        },
+      }),
+    ));
+
+    await writeMasterAudit(req, tx, "UPDATE", "StyleTechPack", style.id, style.code);
+  });
+
+  return ok(res, await fetchStyleTechPackById(style.id));
+}));
+
+router.post("/styles/:id/samples", asyncHandler(async (req, res) => {
+  const parsed = styleSampleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid sample payload", "INVALID_STYLE_SAMPLE_PAYLOAD", parsed.error.flatten());
+  }
+
+  const style = await prisma.style.findUnique({ where: { id: req.params.id } });
+  if (!style) {
+    return fail(res, 404, "Style not found", "STYLE_NOT_FOUND");
+  }
+
+  const sample = await prisma.$transaction(async (tx) => {
+    const created = await tx.styleSample.create({
+      data: {
+        styleId: style.id,
+        sampleType: parsed.data.sampleType,
+        status: parsed.data.status,
+        notes: parsed.data.notes || "",
+        approvedByUserId: parsed.data.status === "APPROVED" ? req.sessionUser?.id ?? null : null,
+        approvedAt: parsed.data.status === "APPROVED" ? new Date() : null,
+      },
+    });
+
+    if (parsed.data.assetIds.length) {
+      await tx.styleSampleAsset.createMany({
+        data: parsed.data.assetIds.map((assetId) => ({ sampleId: created.id, assetId })),
+      });
+    }
+
+    await writeMasterAudit(req, tx, "CREATE", "StyleSample", created.id, `${style.code} ${parsed.data.sampleType}`);
+    return created;
+  });
+
+  return ok(res, { item: (await fetchStyleTechPackById(style.id)).samples.find((item) => item.id === sample.id) }, 201);
+}));
+
+router.patch("/styles/:id/samples/:sampleId", asyncHandler(async (req, res) => {
+  const parsed = styleSampleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid sample payload", "INVALID_STYLE_SAMPLE_PAYLOAD", parsed.error.flatten());
+  }
+
+  const sample = await prisma.styleSample.findUnique({ where: { id: req.params.sampleId } });
+  if (!sample || sample.styleId !== req.params.id) {
+    return fail(res, 404, "Style sample not found", "STYLE_SAMPLE_NOT_FOUND");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.styleSample.update({
+      where: { id: sample.id },
+      data: {
+        sampleType: parsed.data.sampleType,
+        status: parsed.data.status,
+        notes: parsed.data.notes || "",
+        approvedByUserId: parsed.data.status === "APPROVED" ? req.sessionUser?.id ?? null : null,
+        approvedAt: parsed.data.status === "APPROVED" ? new Date() : null,
+      },
+    });
+    await tx.styleSampleAsset.deleteMany({ where: { sampleId: sample.id } });
+    if (parsed.data.assetIds.length) {
+      await tx.styleSampleAsset.createMany({
+        data: parsed.data.assetIds.map((assetId) => ({ sampleId: sample.id, assetId })),
+      });
+    }
+    await writeMasterAudit(req, tx, "UPDATE", "StyleSample", sample.id, `${req.params.id} ${parsed.data.sampleType}`);
+  });
+
+  return ok(res, { item: (await fetchStyleTechPackById(req.params.id)).samples.find((item) => item.id === sample.id) });
+}));
+
+router.post("/styles/:id/assets", asyncHandler(async (req, res) => {
+  const parsed = attachAssetSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid style asset payload", "INVALID_STYLE_ASSET_PAYLOAD", parsed.error.flatten());
+  }
+
+  const [style, asset] = await Promise.all([
+    prisma.style.findUnique({ where: { id: req.params.id } }),
+    prisma.fileAsset.findUnique({ where: { id: parsed.data.assetId } }),
+  ]);
+  if (!style) return fail(res, 404, "Style not found", "STYLE_NOT_FOUND");
+  if (!asset) return fail(res, 404, "Asset not found", "ASSET_NOT_FOUND");
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const item = await tx.fileAsset.update({
+      where: { id: asset.id },
+      data: {
+        entityType: "STYLE",
+        entityId: style.id,
+        kind: parsed.data.kind ?? asset.kind,
+      },
+    });
+    await writeMasterAudit(req, tx, "UPDATE", "FileAsset", item.id, item.originalName);
+    return item;
+  });
+
+  return ok(res, { item: mapFileAsset(updated) });
+}));
+
+router.delete("/styles/:id/assets/:assetId", asyncHandler(async (req, res) => {
+  const asset = await prisma.fileAsset.findUnique({ where: { id: req.params.assetId } });
+  if (!asset || asset.entityType !== "STYLE" || asset.entityId !== req.params.id) {
+    return fail(res, 404, "Asset not found", "ASSET_NOT_FOUND");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.styleSampleAsset.deleteMany({ where: { assetId: asset.id } });
+    await tx.fileAsset.delete({ where: { id: asset.id } });
+    await writeMasterAudit(req, tx, "DELETE", "FileAsset", asset.id, asset.originalName);
+  });
+  await deleteAssetBinary(asset.storagePath);
+
   return res.status(204).send();
 }));
 

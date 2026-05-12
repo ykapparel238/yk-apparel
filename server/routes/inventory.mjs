@@ -26,6 +26,27 @@ const procurementRequestUpdateSchema = z.object({
   status: z.enum(["OPEN", "IN_PROGRESS", "CLOSED"]),
 });
 
+const purchaseOrderSchema = z.object({
+  procurementRequestId: z.string().min(1),
+  orderedQty: z.coerce.number().positive(),
+  expectedDate: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+});
+
+const purchaseOrderUpdateSchema = z.object({
+  orderedQty: z.coerce.number().positive().optional(),
+  expectedDate: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+  status: z.enum(["DRAFT", "ISSUED", "PARTIAL_RECEIVED", "RECEIVED", "CANCELLED"]).optional(),
+});
+
+const goodsReceiptSchema = z.object({
+  purchaseOrderId: z.string().min(1),
+  receivedQty: z.coerce.number().positive(),
+  receivedAt: z.string().min(1),
+  note: z.string().optional().nullable(),
+});
+
 function mapType(value) {
   return value
     .toLowerCase()
@@ -55,8 +76,35 @@ function mapProcurementRequest(item) {
   };
 }
 
+function mapPurchaseOrderStatus(value) {
+  return mapType(value);
+}
+
+function mapPurchaseOrder(item) {
+  const line = item.lines[0];
+  return {
+    id: item.id,
+    poNumber: item.poNumber,
+    procurementRequestId: item.procurementRequestId ?? null,
+    supplierId: item.supplierId,
+    supplier: item.supplier.name,
+    materialId: line?.materialId ?? null,
+    material: line?.material.name ?? null,
+    sku: line?.material.sku ?? null,
+    requestedQty: Number(line?.requestedQty ?? 0),
+    orderedQty: Number(line?.orderedQty ?? 0),
+    receivedQty: Number(line?.receivedQty ?? 0),
+    balanceQty: Math.max(0, Number(line?.orderedQty ?? 0) - Number(line?.receivedQty ?? 0)),
+    uom: line?.uom ?? "",
+    status: mapPurchaseOrderStatus(item.status),
+    expectedDate: item.expectedDate ? item.expectedDate.toISOString().slice(0, 10) : null,
+    note: item.note ?? "",
+    receipts: item.receipts.length,
+  };
+}
+
 router.get("/", asyncHandler(async (_req, res) => {
-  const [materials, procurementRequests, bomItems, orders] = await Promise.all([
+  const [materials, procurementRequests, purchaseOrders, bomItems, orders] = await Promise.all([
     prisma.material.findMany({
       orderBy: { sku: "asc" },
       include: { supplier: true },
@@ -68,6 +116,18 @@ router.get("/", asyncHandler(async (_req, res) => {
         material: { include: { supplier: true } },
         createdBy: true,
       },
+    }),
+    prisma.supplierPurchaseOrder.findMany({
+      include: {
+        supplier: true,
+        lines: {
+          include: {
+            material: true,
+          },
+        },
+        receipts: true,
+      },
+      orderBy: { orderDate: "desc" },
     }),
     prisma.billOfMaterialItem.findMany({
       include: {
@@ -101,6 +161,7 @@ router.get("/", asyncHandler(async (_req, res) => {
   return ok(res, {
     items,
     lowStockCount: items.filter((item) => item.stock <= item.min).length,
+    purchaseOrders: purchaseOrders.map(mapPurchaseOrder),
   });
 }));
 
@@ -115,6 +176,21 @@ router.get("/procurement-requests", asyncHandler(async (_req, res) => {
   });
 
   return ok(res, { items: requests.map(mapProcurementRequest) });
+}));
+
+router.get("/purchase-orders", asyncHandler(async (_req, res) => {
+  const orders = await prisma.supplierPurchaseOrder.findMany({
+    include: {
+      supplier: true,
+      lines: {
+        include: { material: true },
+      },
+      receipts: true,
+    },
+    orderBy: { orderDate: "desc" },
+  });
+
+  return ok(res, { items: orders.map(mapPurchaseOrder) });
 }));
 
 router.post(
@@ -286,6 +362,279 @@ router.patch(
     });
 
     return ok(res, { item: mapProcurementRequest(updated) });
+  }),
+);
+
+router.post(
+  "/purchase-orders",
+  requireRoles("ADMIN", "STORE_MANAGER"),
+  asyncHandler(async (req, res) => {
+    const parsed = purchaseOrderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return fail(res, 400, "Invalid supplier PO payload", "INVALID_SUPPLIER_PO", parsed.error.flatten());
+    }
+
+    const expectedDate = parsed.data.expectedDate ? new Date(parsed.data.expectedDate) : null;
+    if (parsed.data.expectedDate && Number.isNaN(expectedDate?.getTime())) {
+      return fail(res, 400, "Invalid expected date", "INVALID_EXPECTED_DATE");
+    }
+
+    const [requestItem, existingPo, latestPo] = await Promise.all([
+      prisma.procurementRequest.findUnique({
+        where: { id: parsed.data.procurementRequestId },
+        include: {
+          material: true,
+          supplier: true,
+        },
+      }),
+      prisma.supplierPurchaseOrder.findFirst({
+        where: {
+          procurementRequestId: parsed.data.procurementRequestId,
+          status: { in: ["DRAFT", "ISSUED", "PARTIAL_RECEIVED"] },
+        },
+      }),
+      prisma.supplierPurchaseOrder.findFirst({
+        orderBy: { createdAt: "desc" },
+        select: { poNumber: true },
+      }),
+    ]);
+
+    if (!requestItem) {
+      return fail(res, 404, "Procurement request not found", "PROCUREMENT_REQUEST_NOT_FOUND");
+    }
+    if (existingPo) {
+      return fail(res, 409, "An active supplier PO already exists for this request", "SUPPLIER_PO_EXISTS");
+    }
+
+    const nextNumber = (() => {
+      const last = latestPo?.poNumber?.match(/SPO-(\d+)/)?.[1];
+      const serial = last ? Number(last) + 1 : 2401;
+      return `SPO-${serial}`;
+    })();
+
+    const created = await prisma.$transaction(async (tx) => {
+      const po = await tx.supplierPurchaseOrder.create({
+        data: {
+          poNumber: nextNumber,
+          supplierId: requestItem.supplierId ?? requestItem.material.supplierId,
+          procurementRequestId: requestItem.id,
+          status: "ISSUED",
+          expectedDate,
+          note: parsed.data.note?.trim() || requestItem.note,
+          lines: {
+            create: [{
+              materialId: requestItem.materialId,
+              requestedQty: requestItem.requestedQty.toFixed(2),
+              orderedQty: parsed.data.orderedQty.toFixed(2),
+              uom: requestItem.material.uom,
+            }],
+          },
+        },
+        include: {
+          supplier: true,
+          lines: { include: { material: true } },
+          receipts: true,
+        },
+      });
+
+      await tx.procurementRequest.update({
+        where: { id: requestItem.id },
+        data: { status: "IN_PROGRESS" },
+      });
+
+      await writeAuditLog(req, {
+        tx,
+        module: "Inventory",
+        action: "Created supplier PO",
+        targetType: "SupplierPurchaseOrder",
+        targetId: po.id,
+        targetLabel: po.poNumber,
+      });
+
+      return po;
+    });
+
+    return ok(res, { item: mapPurchaseOrder(created) }, 201);
+  }),
+);
+
+router.patch(
+  "/purchase-orders/:id",
+  requireRoles("ADMIN", "STORE_MANAGER"),
+  asyncHandler(async (req, res) => {
+    const parsed = purchaseOrderUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return fail(res, 400, "Invalid supplier PO update payload", "INVALID_SUPPLIER_PO_UPDATE", parsed.error.flatten());
+    }
+
+    const existing = await prisma.supplierPurchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: {
+        supplier: true,
+        lines: { include: { material: true } },
+        receipts: true,
+      },
+    });
+    if (!existing) {
+      return fail(res, 404, "Supplier PO not found", "SUPPLIER_PO_NOT_FOUND");
+    }
+
+    const expectedDate = parsed.data.expectedDate ? new Date(parsed.data.expectedDate) : undefined;
+    if (parsed.data.expectedDate && Number.isNaN(expectedDate?.getTime())) {
+      return fail(res, 400, "Invalid expected date", "INVALID_EXPECTED_DATE");
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const po = await tx.supplierPurchaseOrder.update({
+        where: { id: existing.id },
+        data: {
+          expectedDate,
+          note: parsed.data.note?.trim(),
+          status: parsed.data.status,
+        },
+        include: {
+          supplier: true,
+          lines: { include: { material: true } },
+          receipts: true,
+        },
+      });
+
+      if (parsed.data.orderedQty) {
+        await tx.supplierPurchaseOrderLine.update({
+          where: { id: po.lines[0].id },
+          data: { orderedQty: parsed.data.orderedQty.toFixed(2) },
+        });
+      }
+
+      await writeAuditLog(req, {
+        tx,
+        module: "Inventory",
+        action: "Updated supplier PO",
+        targetType: "SupplierPurchaseOrder",
+        targetId: po.id,
+        targetLabel: po.poNumber,
+      });
+
+      return tx.supplierPurchaseOrder.findUnique({
+        where: { id: existing.id },
+        include: {
+          supplier: true,
+          lines: { include: { material: true } },
+          receipts: true,
+        },
+      });
+    });
+
+    return ok(res, { item: mapPurchaseOrder(updated) });
+  }),
+);
+
+router.post(
+  "/goods-receipts",
+  requireRoles("ADMIN", "STORE_MANAGER"),
+  asyncHandler(async (req, res) => {
+    const parsed = goodsReceiptSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return fail(res, 400, "Invalid goods receipt payload", "INVALID_GOODS_RECEIPT", parsed.error.flatten());
+    }
+
+    const receivedAt = new Date(parsed.data.receivedAt);
+    if (Number.isNaN(receivedAt.getTime())) {
+      return fail(res, 400, "Invalid receipt date", "INVALID_RECEIPT_DATE");
+    }
+
+    const [purchaseOrder, latestReceipt] = await Promise.all([
+      prisma.supplierPurchaseOrder.findUnique({
+        where: { id: parsed.data.purchaseOrderId },
+        include: {
+          procurementRequest: true,
+          lines: { include: { material: true } },
+          supplier: true,
+          receipts: true,
+        },
+      }),
+      prisma.goodsReceipt.findFirst({
+        orderBy: { createdAt: "desc" },
+        select: { receiptNumber: true },
+      }),
+    ]);
+
+    if (!purchaseOrder) {
+      return fail(res, 404, "Supplier PO not found", "SUPPLIER_PO_NOT_FOUND");
+    }
+
+    const line = purchaseOrder.lines[0];
+    const remaining = Number(line.orderedQty) - Number(line.receivedQty);
+    if (parsed.data.receivedQty > remaining) {
+      return fail(res, 409, "Receipt quantity cannot exceed PO balance", "EXCESS_RECEIPT_QTY", { remaining });
+    }
+
+    const nextNumber = (() => {
+      const last = latestReceipt?.receiptNumber?.match(/GRN-(\d+)/)?.[1];
+      const serial = last ? Number(last) + 1 : 2401;
+      return `GRN-${serial}`;
+    })();
+
+    const result = await prisma.$transaction(async (tx) => {
+      const receipt = await tx.goodsReceipt.create({
+        data: {
+          receiptNumber: nextNumber,
+          purchaseOrderId: purchaseOrder.id,
+          receivedAt,
+          note: parsed.data.note?.trim() || null,
+        },
+      });
+
+      await tx.goodsReceiptLine.create({
+        data: {
+          goodsReceiptId: receipt.id,
+          purchaseOrderLineId: line.id,
+          receivedQty: parsed.data.receivedQty.toFixed(2),
+        },
+      });
+
+      const updatedLine = await tx.supplierPurchaseOrderLine.update({
+        where: { id: line.id },
+        data: {
+          receivedQty: (Number(line.receivedQty) + parsed.data.receivedQty).toFixed(2),
+        },
+      });
+
+      await tx.material.update({
+        where: { id: line.materialId },
+        data: {
+          stockQty: (Number(line.material.stockQty) + parsed.data.receivedQty).toFixed(2),
+        },
+      });
+
+      const fullyReceived = Number(updatedLine.receivedQty) >= Number(updatedLine.orderedQty);
+      await tx.supplierPurchaseOrder.update({
+        where: { id: purchaseOrder.id },
+        data: {
+          status: fullyReceived ? "RECEIVED" : "PARTIAL_RECEIVED",
+        },
+      });
+
+      if (purchaseOrder.procurementRequestId && fullyReceived) {
+        await tx.procurementRequest.update({
+          where: { id: purchaseOrder.procurementRequestId },
+          data: { status: "CLOSED" },
+        });
+      }
+
+      await writeAuditLog(req, {
+        tx,
+        module: "Inventory",
+        action: "Received goods",
+        targetType: "GoodsReceipt",
+        targetId: receipt.id,
+        targetLabel: receipt.receiptNumber,
+      });
+
+      return receipt;
+    });
+
+    return ok(res, { item: { id: result.id, receiptNumber: result.receiptNumber } }, 201);
   }),
 );
 

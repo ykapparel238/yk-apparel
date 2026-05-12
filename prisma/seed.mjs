@@ -11,8 +11,20 @@ async function main() {
   await prisma.alert.deleteMany();
   await prisma.auditLog.deleteMany();
   await prisma.session.deleteMany();
+  await prisma.correctiveAction.deleteMany();
+  await prisma.productionEntry.deleteMany();
+  await prisma.downtimeReason.deleteMany();
+  await prisma.goodsReceiptLine.deleteMany();
+  await prisma.goodsReceipt.deleteMany();
+  await prisma.supplierPurchaseOrderLine.deleteMany();
+  await prisma.supplierPurchaseOrder.deleteMany();
   await prisma.procurementRequest.deleteMany();
   await prisma.dispatchShipment.deleteMany();
+  await prisma.styleSampleAsset.deleteMany();
+  await prisma.fileAsset.deleteMany();
+  await prisma.styleSample.deleteMany();
+  await prisma.styleMeasurementSpec.deleteMany();
+  await prisma.styleThreadSpec.deleteMany();
   await prisma.qaInspectionDefect.deleteMany();
   await prisma.qaInspection.deleteMany();
   await prisma.qaDefectType.deleteMany();
@@ -118,10 +130,96 @@ async function main() {
 
   await prisma.styleColor.createMany({
     data: [
-      { styleId: styles[0].id, name: "Ecru", hexCode: "#EFE7D6", sortOrder: 1 },
-      { styleId: styles[0].id, name: "Charcoal", hexCode: "#3A3D44", sortOrder: 2 },
-      { styleId: styles[1].id, name: "Navy", hexCode: "#1F2A4A", sortOrder: 1 },
-      { styleId: styles[1].id, name: "Burgundy", hexCode: "#6E1F2C", sortOrder: 2 },
+      { styleId: styles[0].id, name: "Ecru", hexCode: "#EFE7D6", pantoneCode: "11-0608", threadCode: "TH-ECRU-30", notes: "Core base shade", sortOrder: 1 },
+      { styleId: styles[0].id, name: "Charcoal", hexCode: "#3A3D44", pantoneCode: "19-4007", threadCode: "TH-CHR-30", notes: "Contrast trim", sortOrder: 2 },
+      { styleId: styles[1].id, name: "Navy", hexCode: "#1F2A4A", pantoneCode: "19-3921", threadCode: "TH-NAV-32", notes: "Body yarn", sortOrder: 1 },
+      { styleId: styles[1].id, name: "Burgundy", hexCode: "#6E1F2C", pantoneCode: "19-1629", threadCode: "TH-BUR-32", notes: "Accent colourway", sortOrder: 2 },
+    ],
+  });
+
+  await prisma.styleMeasurementSpec.createMany({
+    data: [
+      { styleId: styles[0].id, sizeLabel: "M", measurementPoint: "Chest 1\" below armhole", targetValue: "42.00", tolerancePlus: "0.50", toleranceMinus: "0.50", unit: "in" },
+      { styleId: styles[0].id, sizeLabel: "M", measurementPoint: "Body length HPS", targetValue: "27.50", tolerancePlus: "0.50", toleranceMinus: "0.50", unit: "in" },
+      { styleId: styles[0].id, sizeLabel: "L", measurementPoint: "Chest 1\" below armhole", targetValue: "44.00", tolerancePlus: "0.50", toleranceMinus: "0.50", unit: "in" },
+      { styleId: styles[1].id, sizeLabel: "S", measurementPoint: "Across shoulder", targetValue: "16.25", tolerancePlus: "0.25", toleranceMinus: "0.25", unit: "in" },
+      { styleId: styles[1].id, sizeLabel: "M", measurementPoint: "Sleeve length", targetValue: "24.00", tolerancePlus: "0.50", toleranceMinus: "0.50", unit: "in" },
+    ],
+  });
+
+  await prisma.styleThreadSpec.createMany({
+    data: [
+      { styleId: styles[0].id, materialName: "Combed cotton 2/30s", countSpec: "2/30s", colorRef: "Ecru", supplierId: suppliers[0].id, materialId: materials[0].id, processNotes: "Body yarn for 7GG cables", sortOrder: 1 },
+      { styleId: styles[0].id, materialName: "Poly core thread", countSpec: "40/2", colorRef: "Charcoal", supplierId: suppliers[3].id, processNotes: "Linking thread for neck rib", sortOrder: 2 },
+      { styleId: styles[1].id, materialName: "Acrylic blend 2/32s", countSpec: "2/32s", colorRef: "Navy", supplierId: suppliers[1].id, materialId: materials[1].id, processNotes: "V-neck body program", sortOrder: 1 },
+    ],
+  });
+
+  const styleAssets = await Promise.all([
+    prisma.fileAsset.create({
+      data: {
+        entityType: "STYLE",
+        entityId: styles[0].id,
+        kind: "SAMPLE_IMAGE",
+        originalName: "mns-cable-front.jpg",
+        mimeType: "image/jpeg",
+        sizeBytes: 245120,
+        storagePath: "style/sample-seed/mns-cable-front.jpg",
+        uploadedByUserId: users[0].id,
+      },
+    }),
+    prisma.fileAsset.create({
+      data: {
+        entityType: "STYLE",
+        entityId: styles[0].id,
+        kind: "REFERENCE_IMAGE",
+        originalName: "mns-cable-back.jpg",
+        mimeType: "image/jpeg",
+        sizeBytes: 221760,
+        storagePath: "style/sample-seed/mns-cable-back.jpg",
+        uploadedByUserId: users[0].id,
+      },
+    }),
+    prisma.fileAsset.create({
+      data: {
+        entityType: "STYLE",
+        entityId: styles[1].id,
+        kind: "TECH_PACK",
+        originalName: "hm-vneck-tech-pack.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 402112,
+        storagePath: "style/sample-seed/hm-vneck-tech-pack.pdf",
+        uploadedByUserId: users[2].id,
+      },
+    }),
+  ]);
+
+  const styleSamples = await Promise.all([
+    prisma.styleSample.create({
+      data: {
+        styleId: styles[0].id,
+        sampleType: "PROTO",
+        status: "APPROVED",
+        notes: "Proto approved after neck width correction.",
+        approvedByUserId: users[0].id,
+        approvedAt: new Date("2024-10-18T10:00:00Z"),
+      },
+    }),
+    prisma.styleSample.create({
+      data: {
+        styleId: styles[1].id,
+        sampleType: "PP",
+        status: "SUBMITTED",
+        notes: "Pending buyer handfeel confirmation.",
+      },
+    }),
+  ]);
+
+  await prisma.styleSampleAsset.createMany({
+    data: [
+      { sampleId: styleSamples[0].id, assetId: styleAssets[0].id },
+      { sampleId: styleSamples[0].id, assetId: styleAssets[1].id },
+      { sampleId: styleSamples[1].id, assetId: styleAssets[2].id },
     ],
   });
 
@@ -295,6 +393,133 @@ async function main() {
         requestedQty: "1500.00",
         note: "Buffer replenishment completed",
         status: "CLOSED",
+      },
+    ],
+  });
+
+  const openProcurementRequest = await prisma.procurementRequest.findFirst({
+    where: { materialId: materials[1].id, status: "OPEN" },
+  });
+
+  const supplierPo = await prisma.supplierPurchaseOrder.create({
+    data: {
+      poNumber: "SPO-2401",
+      supplierId: suppliers[1].id,
+      procurementRequestId: openProcurementRequest?.id ?? null,
+      status: "PARTIAL_RECEIVED",
+      orderDate: new Date("2024-11-12"),
+      expectedDate: new Date("2024-11-22"),
+      note: "Urgent navy yarn replenishment for AW24 pullovers",
+      lines: {
+        create: [
+          {
+            materialId: materials[1].id,
+            requestedQty: "2400.00",
+            orderedQty: "2600.00",
+            receivedQty: "1200.00",
+            uom: "Kg",
+          },
+        ],
+      },
+    },
+    include: { lines: true },
+  });
+
+  await prisma.goodsReceipt.create({
+    data: {
+      receiptNumber: "GRN-2401",
+      purchaseOrderId: supplierPo.id,
+      receivedAt: new Date("2024-11-18T10:00:00Z"),
+      note: "First partial lot received and quality-cleared",
+      lines: {
+        create: [
+          {
+            purchaseOrderLineId: supplierPo.lines[0].id,
+            receivedQty: "1200.00",
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.downtimeReason.createMany({
+    data: [
+      { code: "SETUP", label: "Program / setup change" },
+      { code: "MAINT", label: "Machine maintenance" },
+      { code: "YARN_WAIT", label: "Yarn waiting" },
+    ],
+  });
+
+  const [setupReason, maintenanceReason] = await Promise.all([
+    prisma.downtimeReason.findUnique({ where: { code: "SETUP" } }),
+    prisma.downtimeReason.findUnique({ where: { code: "MAINT" } }),
+  ]);
+
+  await prisma.productionEntry.createMany({
+    data: [
+      {
+        metricDate: new Date("2024-11-19T08:00:00Z"),
+        lineId: lines[0].id,
+        orderId: orders[0].id,
+        shiftId: shiftA.id,
+        stage: "KNITTING",
+        plannedQty: 2200,
+        actualQty: 2080,
+        rejectedQty: 42,
+        downtimeMinutes: 35,
+        downtimeReasonId: setupReason?.id ?? null,
+        remarks: "Gauge setup change for contrast panel.",
+      },
+      {
+        metricDate: new Date("2024-11-19T14:00:00Z"),
+        lineId: lines[1].id,
+        orderId: orders[0].id,
+        shiftId: shiftB.id,
+        stage: "KNITTING",
+        plannedQty: 1800,
+        actualQty: 1650,
+        rejectedQty: 28,
+        downtimeMinutes: 50,
+        downtimeReasonId: maintenanceReason?.id ?? null,
+        remarks: "Needle replacement after oil leak.",
+      },
+      {
+        metricDate: new Date("2024-11-20T08:00:00Z"),
+        lineId: lines[3].id,
+        orderId: orders[1].id,
+        shiftId: shiftA.id,
+        stage: "LINKING",
+        plannedQty: 1600,
+        actualQty: 1515,
+        rejectedQty: 16,
+        downtimeMinutes: 20,
+        downtimeReasonId: setupReason?.id ?? null,
+        remarks: "Operator learning curve on neckline program.",
+      },
+    ],
+  });
+
+  await prisma.correctiveAction.createMany({
+    data: [
+      {
+        inspectionId: inspection.id,
+        vendorId: vendors[1].id,
+        orderId: orders[1].id,
+        lineId: lines[3].id,
+        title: "Linking alignment correction",
+        rootCause: "Operator fixture was not locked after size changeover.",
+        ownerName: "Meena Sharma",
+        dueDate: new Date("2024-11-25"),
+        status: "IN_PROGRESS",
+      },
+      {
+        vendorId: vendors[2].id,
+        orderId: orders[0].id,
+        title: "Shade variation wash review",
+        rootCause: "Inconsistent subcontract wash temperature between batches.",
+        ownerName: "Devansh Rao",
+        dueDate: new Date("2024-11-28"),
+        status: "OPEN",
       },
     ],
   });

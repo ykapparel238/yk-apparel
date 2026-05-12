@@ -12,6 +12,14 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   ALLOW_PROD_SEED: z.enum(["true", "false"]).optional().default("false"),
+  UPLOAD_STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  UPLOAD_LOCAL_DIR: z.string().min(1).default("uploads"),
+  UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
+  S3_BUCKET: z.string().optional().default(""),
+  S3_REGION: z.string().optional().default(""),
+  S3_ENDPOINT: z.string().optional().default(""),
+  S3_ACCESS_KEY_ID: z.string().optional().default(""),
+  S3_SECRET_ACCESS_KEY: z.string().optional().default(""),
 });
 
 let cachedEnv = null;

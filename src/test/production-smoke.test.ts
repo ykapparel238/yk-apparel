@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reconcileReleaseData } from "../../scripts/production-smoke.mjs";
+import { reconcileOperationalReports, reconcileReleaseData } from "../../scripts/production-smoke.mjs";
 
 describe("production smoke reconciliation", () => {
   it("accepts aligned dashboard, report, and mrp totals", () => {
@@ -50,5 +50,81 @@ describe("production smoke reconciliation", () => {
         mrpReportRows: [{ shortage: 30 }],
       }),
     ).toThrow("Dashboard totalOrders mismatch");
+  });
+
+  it("accepts aligned procurement, production, CAPA, and tech pack reports", () => {
+    expect(() =>
+      reconcileOperationalReports({
+        purchaseOrders: {
+          items: [
+            { orderedQty: 1200, receivedQty: 800 },
+            { orderedQty: 300, receivedQty: 300 },
+          ],
+        },
+        procurementRows: [
+          { orderedQty: 1200, receivedQty: 800 },
+          { orderedQty: 300, receivedQty: 300 },
+        ],
+        productionEntries: {
+          items: [
+            { actualQty: 100, rejectedQty: 4 },
+            { actualQty: 90, rejectedQty: 3 },
+          ],
+        },
+        productionRows: [
+          { actualQty: 100, rejectedQty: 4 },
+          { actualQty: 90, rejectedQty: 3 },
+        ],
+        capaItems: {
+          items: [
+            { status: "OPEN" },
+            { status: "CLOSED" },
+          ],
+        },
+        capaRows: [
+          { status: "Open" },
+          { status: "Closed" },
+        ],
+        styleTechPack: {
+          styleCode: "ST-1",
+          assets: [{}],
+          samples: [{}, {}],
+          measurements: [{}],
+          threadSpecs: [{}, {}],
+        },
+        techPackRows: [
+          {
+            styleCode: "ST-1",
+            assetCount: 1,
+            sampleCount: 2,
+            measurementCount: 1,
+            threadSpecCount: 2,
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it("fails when operational reports diverge", () => {
+    expect(() =>
+      reconcileOperationalReports({
+        purchaseOrders: {
+          items: [{ orderedQty: 1200, receivedQty: 800 }],
+        },
+        procurementRows: [{ orderedQty: 1200, receivedQty: 700 }],
+        productionEntries: { items: [{ actualQty: 100, rejectedQty: 4 }] },
+        productionRows: [{ actualQty: 95, rejectedQty: 4 }],
+        capaItems: { items: [{ status: "OPEN" }] },
+        capaRows: [{ status: "Closed" }],
+        styleTechPack: {
+          styleCode: "ST-1",
+          assets: [{}],
+          samples: [],
+          measurements: [],
+          threadSpecs: [],
+        },
+        techPackRows: [{ styleCode: "ST-1", assetCount: 2, sampleCount: 0, measurementCount: 0, threadSpecCount: 0 }],
+      }),
+    ).toThrow("Procurement received total mismatch");
   });
 });

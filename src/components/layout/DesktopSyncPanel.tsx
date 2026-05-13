@@ -28,9 +28,9 @@ export function DesktopSyncPanel() {
     resolveConflict,
   } = useDesktopSync();
 
-  if (!status.isDesktop) return null;
-
   const recentRuns = useMemo(() => diagnostics?.recentRuns ?? [], [diagnostics?.recentRuns]);
+
+  if (!status.isDesktop) return null;
 
   return (
     <Sheet open={open} onOpenChange={(next) => {

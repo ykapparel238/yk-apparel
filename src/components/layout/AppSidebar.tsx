@@ -10,6 +10,7 @@ import {
   BarChart3,
   Settings,
   Boxes,
+  type LucideIcon,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -49,7 +50,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
 
-  const renderItem = (item: { title: string; url: string; icon: any }) => {
+  const renderItem = (item: { title: string; url: string; icon: LucideIcon }) => {
     const active = item.url === "/" ? pathname === "/" : pathname.startsWith(item.url);
     return (
       <SidebarMenuItem key={item.title}>

@@ -33,6 +33,7 @@ export default function Reports() {
       });
     },
   });
+  const previewColumns = useMemo(() => (preview?.rows[0] ? Object.keys(preview.rows[0]) : []), [preview]);
 
   if (reportsQuery.isLoading || mrpQuery.isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground">Loading reports...</div>;
@@ -44,7 +45,6 @@ export default function Reports() {
 
   const reports = reportsQuery.data.items;
   const shortages = mrpQuery.data.items.filter((item) => item.shortage > 0).slice(0, 8);
-  const previewColumns = useMemo(() => (preview?.rows[0] ? Object.keys(preview.rows[0]) : []), [preview]);
 
   const downloadCsv = (report: (typeof reports)[number]) => {
     window.open(report.downloadUrl, "_blank", "noopener,noreferrer");

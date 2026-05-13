@@ -31,7 +31,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pencil, Plus, Shield } from "lucide-react";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { type FieldValues, type Path, type UseFormReturn, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -74,6 +74,13 @@ const roleOptions = [
   "DISPATCH_MANAGER",
 ];
 
+function getEditorId(editor: EditorState, kind: NonNullable<EditorState>["kind"]) {
+  if (!editor || editor.kind !== kind) {
+    throw new Error(`No ${kind} selected`);
+  }
+  return editor.item.id;
+}
+
 export default function Settings() {
   const [editor, setEditor] = useState<EditorState>(null);
   const queryClient = useQueryClient();
@@ -104,7 +111,7 @@ export default function Settings() {
   };
 
   const departmentMutation = useMutation({
-    mutationFn: (values: z.infer<typeof departmentSchema>) => updateDepartment((editor as any).item.id, values),
+    mutationFn: (values: z.infer<typeof departmentSchema>) => updateDepartment(getEditorId(editor, "department"), values),
     onSuccess: async () => {
       toast.success("Department updated");
       setEditor(null);
@@ -113,7 +120,7 @@ export default function Settings() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to update department"),
   });
   const shiftMutation = useMutation({
-    mutationFn: (values: z.infer<typeof shiftSchema>) => updateShift((editor as any).item.id, values),
+    mutationFn: (values: z.infer<typeof shiftSchema>) => updateShift(getEditorId(editor, "shift"), values),
     onSuccess: async () => {
       toast.success("Shift updated");
       setEditor(null);
@@ -123,7 +130,7 @@ export default function Settings() {
   });
   const userMutation = useMutation({
     mutationFn: (values: z.infer<typeof userSchema>) =>
-      updateSettingsUser((editor as any).item.id, {
+      updateSettingsUser(getEditorId(editor, "user"), {
         role: values.role,
         status: values.status,
         departmentCode: values.departmentCode || null,
@@ -137,7 +144,7 @@ export default function Settings() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to update user"),
   });
   const desktopDeviceMutation = useMutation({
-    mutationFn: (values: z.infer<typeof desktopDeviceSchema>) => updateDesktopDevice((editor as { item: { id: string } }).item.id, values),
+    mutationFn: (values: z.infer<typeof desktopDeviceSchema>) => updateDesktopDevice(getEditorId(editor, "desktopDevice"), values),
     onSuccess: async () => {
       toast.success("Desktop device updated");
       setEditor(null);
@@ -512,12 +519,24 @@ export default function Settings() {
   );
 }
 
-function SimpleField({ form, name, label, type = "text", disabled = false }: { form: any; name: string; label: string; type?: string; disabled?: boolean }) {
+function SimpleField<TFieldValues extends FieldValues>({
+  form,
+  name,
+  label,
+  type = "text",
+  disabled = false,
+}: {
+  form: UseFormReturn<TFieldValues>;
+  name: Path<TFieldValues>;
+  label: string;
+  type?: string;
+  disabled?: boolean;
+}) {
   return (
     <FormField
       control={form.control}
       name={name}
-      render={({ field }: any) => (
+      render={({ field }) => (
         <FormItem className="space-y-1.5">
           <FormLabel className="text-xs font-medium">{label}</FormLabel>
           <FormControl>

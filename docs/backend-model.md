@@ -1,44 +1,67 @@
 # Backend Model
 
-## Entity list
+## Current Backend Shape
 
-- `Department`, `Shift`, `User`
-- `Brand`, `Style`, `StyleSize`, `StyleColor`
-- `Supplier`, `Material`, `BillOfMaterialItem`
-- `Vendor`, `VendorChallan`, `VendorWeeklyMetric`
-- `ProductionLine`, `ProductionPlan`, `StageDailyMetric`, `LineDailyMetric`
-- `PurchaseOrder`, `PurchaseOrderSizeAllocation`, `PurchaseOrderColorAllocation`
-- `QaDefectType`, `QaInspection`, `QaInspectionDefect`
-- `DispatchShipment`, `AuditLog`, `Alert`
+The backend is an Express + Prisma API for the KnitCraft MES workflow. It is no longer a planned mock replacement; the core operational modules are implemented against PostgreSQL with route-level tests.
 
-## API endpoints/actions needed by current UI
+## Implemented Domains
 
-- `POST /auth/login`, `POST /auth/logout`, `GET /auth/session`
-- `GET /dashboard/summary`
-- `GET /dashboard/alerts`
-- `GET /orders`, `POST /orders`, `GET /orders/:id`, `PATCH /orders/:id`, `DELETE /orders/:id`
-- `GET /orders/:id/bom`, `GET /orders/:id/challans`
-- `GET /planning/board`, `GET /planning/calendar`, `POST /plans`, `PATCH /plans/:id`
-- `GET /production/stages`, `GET /production/lines`
-- `GET /vendors`, `POST /vendors`, `GET /vendors/:id`, `PATCH /vendors/:id`
-- `GET /vendors/:id/challans`, `POST /challans`, `PATCH /challans/:id`
-- `GET /inventory/materials`, `PATCH /inventory/materials/:id`
-- `GET /qa/summary`, `GET /qa/defects`, `GET /qa/vendor-trends`, `POST /qa/inspections`
-- `GET /dispatch/orders`, `POST /dispatch/shipments`
-- `GET /masters/brands`, `GET /masters/styles`, `GET /masters/suppliers`, `GET /masters/vendors`
-- `GET /settings/departments`, `GET /settings/shifts`, `GET /settings/users`, `GET /settings/audit-log`
+- Foundation: users, departments, shifts, sessions, audit logs, health checks, release smoke checks.
+- Masters: brands, suppliers, vendors, styles, materials, BOM items, production lines.
+- Style tech packs: file assets, samples, measurement specs, thread specs, colorway metadata.
+- Orders: purchase orders, size allocations, color allocations, detail payloads.
+- Planning: production plans, calendar read models, capacity guardrails.
+- Inventory and procurement: stock adjustments, procurement requests, supplier purchase orders, goods receipts.
+- Production: stage/line read models, production entries, downtime reasons.
+- QA: inspections, defect rows, defect types, corrective actions.
+- Vendors: vendor list/detail, challans, scorecards, CAPA/risk indicators.
+- Dispatch: shipments, correction lifecycle, delivered quantity/status reconciliation.
+- Reporting: dashboard, report catalog, CSV/PDF export, MRP, procurement, production actuals, CAPA, tech-pack register, forecast/wastage, risk watchlist.
+- Desktop sync: offline bundle/checkpoint/conflict support.
 
-## Migration/seed plan
+## API Groups
 
-1. Copy `.env.example` to `.env` and point `DATABASE_URL` at PostgreSQL.
+- `/api/auth`
+- `/api/health` and `/api/health/db`
+- `/api/masters`
+- `/api/assets`
+- `/api/orders`
+- `/api/planning`
+- `/api/production`
+- `/api/vendors`
+- `/api/inventory`
+- `/api/qa`
+- `/api/dispatch`
+- `/api/settings`
+- `/api/dashboard`
+- `/api/reports`
+- `/api/mrp`
+- `/api/sync`
+
+## Operational Rules
+
+- API errors use `{ message, code, details }`.
+- Meaningful writes should be audited.
+- Multi-record mutations should use Prisma transactions.
+- Status values must stay aligned with Prisma enums.
+- Report/dashboard logic should prefer shared reporting helpers.
+- File metadata is stored in PostgreSQL; file binaries are stored in local disk or S3-compatible storage.
+
+## Setup
+
+For local development:
+
+1. Configure `.env`.
 2. Run `npm install`.
-3. Run `npm run db:generate`.
-4. Apply `prisma/migrations/0001_init/migration.sql` or run `npm run db:migrate`.
-5. Run `npm run db:seed`.
-6. Replace frontend `mockData` reads module-by-module with API calls against the schema above.
+3. Run `npm run db:setup`.
+4. Run `npm run dev:local`.
 
-## Notes
+For production verification:
 
-- The schema is intentionally shaped around the current screens.
-- Dashboard, calendar, QA, and vendor trend views are supported through operational tables plus lightweight reporting snapshots.
-- No frontend visuals or component structure need to change for the backend to fit.
+1. Run `npm run lint`.
+2. Run `npm test`.
+3. Run `npm run build`.
+4. Run `npm run db:migrate`.
+5. Boot the app.
+6. Run `npm run verify:production`.
+7. Run `npm run verify:release`.

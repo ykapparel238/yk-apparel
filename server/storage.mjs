@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getEnv } from "./env.mjs";
 import { ApiError } from "./http.mjs";
 
@@ -44,7 +45,51 @@ export function ensureUploadDirectory() {
 }
 
 export function toPublicAssetUrl(storagePath) {
+  const env = getEnv();
+  if (env.UPLOAD_STORAGE_DRIVER === "s3") {
+    const key = storagePath.split(path.sep).join("/");
+    if (env.S3_ENDPOINT) {
+      return `${env.S3_ENDPOINT.replace(/\/$/, "")}/${env.S3_BUCKET}/${key}`;
+    }
+    return `https://${env.S3_BUCKET}.s3.${env.S3_REGION}.amazonaws.com/${key}`;
+  }
   return `/uploads/${storagePath.split(path.sep).join("/")}`;
+}
+
+function getS3Config() {
+  const env = getEnv();
+  const missing = [
+    ["S3_BUCKET", env.S3_BUCKET],
+    ["S3_REGION", env.S3_REGION],
+    ["S3_ACCESS_KEY_ID", env.S3_ACCESS_KEY_ID],
+    ["S3_SECRET_ACCESS_KEY", env.S3_SECRET_ACCESS_KEY],
+  ].filter(([, value]) => !value);
+
+  if (missing.length) {
+    throw new ApiError(500, "S3 storage is not configured", "S3_STORAGE_NOT_CONFIGURED", {
+      missing: missing.map(([key]) => key),
+    });
+  }
+
+  return {
+    bucket: env.S3_BUCKET,
+    region: env.S3_REGION,
+    endpoint: env.S3_ENDPOINT || undefined,
+    credentials: {
+      accessKeyId: env.S3_ACCESS_KEY_ID,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    },
+  };
+}
+
+function createS3Client() {
+  const config = getS3Config();
+  return new S3Client({
+    region: config.region,
+    endpoint: config.endpoint,
+    forcePathStyle: Boolean(config.endpoint),
+    credentials: config.credentials,
+  });
 }
 
 export function validateAssetPayload({ mimeType, sizeBytes }) {
@@ -68,15 +113,26 @@ export function validateAssetPayload({ mimeType, sizeBytes }) {
 export async function writeAssetBinary({ entityType, entityId, mimeType, originalName, bytes }) {
   const env = getEnv();
   validateAssetPayload({ mimeType, sizeBytes: bytes.length });
-
-  if (env.UPLOAD_STORAGE_DRIVER !== "local") {
-    throw new ApiError(501, "S3 storage is not configured in this workspace", "S3_STORAGE_NOT_CONFIGURED");
-  }
-
-  ensureUploadDirectory();
   const ext = extensionForMimeType(mimeType);
   const fileName = `${sanitizeFileSegment(path.parse(originalName).name)}-${randomUUID()}.${ext}`;
   const relativeDir = path.join(entityType.toLowerCase(), sanitizeFileSegment(entityId));
+
+  if (env.UPLOAD_STORAGE_DRIVER === "s3") {
+    const config = getS3Config();
+    const storagePath = path.posix.join(entityType.toLowerCase(), sanitizeFileSegment(entityId), fileName);
+    await createS3Client().send(new PutObjectCommand({
+      Bucket: config.bucket,
+      Key: storagePath,
+      Body: bytes,
+      ContentType: mimeType,
+    }));
+    return {
+      storagePath,
+      publicUrl: toPublicAssetUrl(storagePath),
+    };
+  }
+
+  ensureUploadDirectory();
   const absoluteDir = path.join(getUploadLocalDir(), relativeDir);
   fs.mkdirSync(absoluteDir, { recursive: true });
   const absolutePath = path.join(absoluteDir, fileName);
@@ -89,7 +145,14 @@ export async function writeAssetBinary({ entityType, entityId, mimeType, origina
 
 export async function deleteAssetBinary(storagePath) {
   const env = getEnv();
-  if (env.UPLOAD_STORAGE_DRIVER !== "local") return;
+  if (env.UPLOAD_STORAGE_DRIVER === "s3") {
+    const config = getS3Config();
+    await createS3Client().send(new DeleteObjectCommand({
+      Bucket: config.bucket,
+      Key: storagePath.split(path.sep).join("/"),
+    }));
+    return;
+  }
 
   const absolutePath = path.join(getUploadLocalDir(), storagePath);
   if (fs.existsSync(absolutePath)) {

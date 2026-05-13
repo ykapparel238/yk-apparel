@@ -536,6 +536,46 @@ async function getCapaRows() {
   }));
 }
 
+async function getStyleTechPackRows() {
+  const [styles, assets] = await Promise.all([
+    prisma.style.findMany({
+      include: {
+        brand: true,
+        sizes: { orderBy: { sortOrder: "asc" } },
+        colors: { orderBy: { sortOrder: "asc" } },
+        samples: { orderBy: { createdAt: "desc" } },
+        measurementSpecs: true,
+        threadSpecs: true,
+      },
+      orderBy: { code: "asc" },
+    }),
+    prisma.fileAsset.findMany({
+      where: { entityType: "STYLE" },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  const assetCountByStyle = assets.reduce((map, asset) => {
+    map.set(asset.entityId, (map.get(asset.entityId) ?? 0) + 1);
+    return map;
+  }, new Map());
+
+  return styles.map((style) => ({
+    brand: style.brand.name,
+    styleCode: style.code,
+    styleName: style.name,
+    gauge: style.gauge,
+    yarn: style.yarnDescription,
+    sizeCount: style.sizes.length,
+    colorwayCount: style.colors.length,
+    sampleCount: style.samples.length,
+    latestSampleStatus: style.samples[0] ? formatEnumLabel(style.samples[0].status) : "Not Started",
+    measurementCount: style.measurementSpecs.length,
+    threadSpecCount: style.threadSpecs.length,
+    assetCount: assetCountByStyle.get(style.id) ?? 0,
+  }));
+}
+
 async function getForecastRows() {
   const [bomItems, materials, orders, procurementRequests] = await Promise.all([
     prisma.billOfMaterialItem.findMany({
@@ -744,6 +784,13 @@ export const reportCatalog = [
     desc: "Corrective actions, owners, due dates, and closure status",
     category: "QA",
     rows: getCapaRows,
+  },
+  {
+    slug: "style-tech-pack-register",
+    name: "Style Tech Pack Register",
+    desc: "Style readiness across assets, samples, measurements, and thread specs",
+    category: "Masters",
+    rows: getStyleTechPackRows,
   },
   {
     slug: "forecast-and-wastage-model",

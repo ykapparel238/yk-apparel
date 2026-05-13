@@ -43,6 +43,7 @@ Backend:
 - session-backed auth
 - shared error contract via server HTTP helpers
 - audit logging on meaningful writes
+- local and S3-compatible asset storage
 - release checks via smoke scripts
 
 Persistence:
@@ -183,6 +184,7 @@ The repo is beyond demo stage and should be treated as an operational product. T
   - CSV and PDF exports
   - MRP in reports
   - procurement, production, CAPA reports
+  - style tech-pack register report
   - forecast and risk watchlist reports
 - Still important:
   - deeper calibration and live reconciliation
@@ -215,8 +217,10 @@ The repo is beyond demo stage and should be treated as an operational product. T
 
 ### Style Tech Pack
 - assets are metadata in DB and files in storage
+- production asset storage supports S3-compatible providers via `UPLOAD_STORAGE_DRIVER=s3`
 - styles should remain backward compatible with older simple payloads
 - order detail should consume style tech-pack data without duplicating style ownership
+- release verification should prove asset metadata, style tech-pack reads, and order-detail tech-pack availability
 
 ## How To Work In This Repo
 
@@ -239,6 +243,7 @@ When fixing a production issue:
 ## Release Readiness Gate
 
 A release should aim to pass:
+- `npm run lint`
 - `npm test`
 - `npm run build`
 - `npm run verify:production`

@@ -110,8 +110,6 @@ import type {
   StyleTechPackPayload,
 } from "@/lib/types";
 
-const notify = (label: string) => toast(`${label} — coming soon`);
-
 const brandSchema = z.object({
   code: z.string().min(2, "Enter a code"),
   name: z.string().min(2, "Enter a name"),
@@ -770,69 +768,6 @@ export default function Masters() {
             <Button size="sm" variant="outline" className="h-9" onClick={() => void refreshMasters()}>
               <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Refresh
             </Button>
-            <Button size="sm" variant="outline" className="h-9" onClick={() => notify("Import")}>
-              <Upload className="h-3.5 w-3.5 mr-1.5" /> Import
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="h-9">
-                  <Download className="h-3.5 w-3.5 mr-1.5" /> Export
-                  <ChevronDown className="h-3.5 w-3.5 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Export as</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => notify("Export CSV")}>
-                  <FileText className="h-3.5 w-3.5 mr-2" /> CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify("Export Excel")}>
-                  <FileSpreadsheet className="h-3.5 w-3.5 mr-2" /> Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify("Export PDF")}>
-                  <FileText className="h-3.5 w-3.5 mr-2" /> PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify("Print")}>
-                  <Printer className="h-3.5 w-3.5 mr-2" /> Print
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="h-9">
-                  <Settings2 className="h-3.5 w-3.5 mr-1.5" /> More
-                  <ChevronDown className="h-3.5 w-3.5 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Bulk actions</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => notify("Bulk activate")}>
-                  <Power className="h-3.5 w-3.5 mr-2" /> Bulk activate
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify("Bulk archive")}>
-                  <Archive className="h-3.5 w-3.5 mr-2" /> Bulk archive
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify("Merge records")}>
-                  <Link2 className="h-3.5 w-3.5 mr-2" /> Merge records
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Configuration</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => notify("Manage tags")}>
-                  <Tag className="h-3.5 w-3.5 mr-2" /> Manage tags
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify("Custom fields")}>
-                  <Settings2 className="h-3.5 w-3.5 mr-2" /> Custom fields
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify("Audit log")}>
-                  <History className="h-3.5 w-3.5 mr-2" /> Audit log
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify("Approval workflow")}>
-                  <ShieldCheck className="h-3.5 w-3.5 mr-2" /> Approval workflow
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" className="h-9">
@@ -878,12 +813,6 @@ export default function Masters() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        <Button size="sm" variant="outline" className="h-9" onClick={() => notify("Filters")}>
-          <Filter className="h-3.5 w-3.5 mr-1.5" /> Filters
-        </Button>
-        <Button size="sm" variant="outline" className="h-9" onClick={() => notify("Saved views")}>
-          <Star className="h-3.5 w-3.5 mr-1.5" /> Saved views
-        </Button>
         <div className="ml-auto text-xs text-muted-foreground">
           {totalRecords} total records
         </div>
@@ -1018,16 +947,6 @@ export default function Masters() {
             newLabel="New Style"
             onNew={() => openEditor({ kind: "style", mode: "create" })}
             className="lg:col-span-2"
-            extraActions={
-              <>
-                <Button size="sm" variant="outline" className="h-8" onClick={() => notify("Manage BOM")}>
-                  <ClipboardList className="h-3.5 w-3.5 mr-1.5" /> BOM
-                </Button>
-                <Button size="sm" variant="outline" className="h-8" onClick={() => notify("Size chart")}>
-                  <Settings2 className="h-3.5 w-3.5 mr-1.5" /> Size chart
-                </Button>
-              </>
-            }
           >
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -1923,7 +1842,6 @@ function Section({
   className = "",
   onNew,
   newLabel,
-  extraActions,
 }: {
   title: string;
   rows: number;
@@ -1931,7 +1849,6 @@ function Section({
   className?: string;
   onNew?: () => void;
   newLabel?: string;
-  extraActions?: React.ReactNode;
 }) {
   return (
     <div className={`bg-card border border-border rounded-lg overflow-hidden ${className}`}>
@@ -1941,43 +1858,11 @@ function Section({
           <span className="text-xs text-muted-foreground font-mono-num">{rows} records</span>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          {extraActions}
-          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => notify(`Search ${title}`)}>
-            <Search className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => notify(`Filter ${title}`)}>
-            <Filter className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => notify(`Export ${title}`)}>
-            <Download className="h-3.5 w-3.5" />
-          </Button>
           {onNew && newLabel && (
             <Button size="sm" className="h-8" onClick={onNew}>
               <Plus className="h-3.5 w-3.5 mr-1.5" /> {newLabel}
             </Button>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" className="h-8 px-2">
-                <MoreHorizontal className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => notify(`Import ${title}`)}>
-                <Upload className="h-3.5 w-3.5 mr-2" /> Import
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => notify(`Print ${title}`)}>
-                <Printer className="h-3.5 w-3.5 mr-2" /> Print
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => notify("Column settings")}>
-                <Settings2 className="h-3.5 w-3.5 mr-2" /> Column settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => notify(`Archive all ${title}`)}>
-                <Archive className="h-3.5 w-3.5 mr-2" /> Archive all
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
       <div className="overflow-x-auto">{children}</div>
@@ -2008,42 +1893,15 @@ function RowActions({
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuLabel className="text-xs">{label}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => notify(`View ${label}`)}>
-          <Eye className="h-3.5 w-3.5 mr-2" /> View details
-        </DropdownMenuItem>
         <DropdownMenuItem onClick={onEdit}>
           <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => notify(`Duplicate ${label}`)}>
-          <Copy className="h-3.5 w-3.5 mr-2" /> Duplicate
-        </DropdownMenuItem>
-        {type === "brand" && (
-          <DropdownMenuItem onClick={() => notify(`View POs of ${label}`)}>
-            <ClipboardList className="h-3.5 w-3.5 mr-2" /> View POs
-          </DropdownMenuItem>
-        )}
-        {type === "supplier" && (
-          <DropdownMenuItem onClick={() => notify(`Create PR for ${label}`)}>
-            <Send className="h-3.5 w-3.5 mr-2" /> Create PR
-          </DropdownMenuItem>
-        )}
         {type === "style" && (
-          <>
-            <DropdownMenuItem onClick={() => notify(`Open BOM ${label}`)}>
-              <ClipboardList className="h-3.5 w-3.5 mr-2" /> Open BOM
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onTechPack?.()}>
-              <FileText className="h-3.5 w-3.5 mr-2" /> Tech pack
-            </DropdownMenuItem>
-          </>
+          <DropdownMenuItem onClick={() => onTechPack?.()}>
+            <FileText className="h-3.5 w-3.5 mr-2" /> Tech pack
+          </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => notify(`Audit ${label}`)}>
-          <History className="h-3.5 w-3.5 mr-2" /> Activity log
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => notify(`Archive ${label}`)}>
-          <Archive className="h-3.5 w-3.5 mr-2" /> Archive
-        </DropdownMenuItem>
         <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
           <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
         </DropdownMenuItem>

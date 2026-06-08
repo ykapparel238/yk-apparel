@@ -376,7 +376,7 @@ async function getRejectionRows() {
         },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { inspection: { inspectedAt: "desc" } },
     take: 200,
   });
   return rows.map((row) => ({

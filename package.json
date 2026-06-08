@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "api:dev": "node server/index.mjs",
+    "start": "node server/index.mjs",
     "dev": "vite",
     "dev:local": "concurrently \"npm run api:dev\" \"npm run dev\"",
     "desktop:dev": "concurrently \"npm run api:dev\" \"vite --host 127.0.0.1 --port 8080\" \"node scripts/desktop-dev.mjs\"",

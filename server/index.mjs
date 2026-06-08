@@ -1,6 +1,8 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { prisma } from "./db.mjs";
 import { getEnv } from "./env.mjs";
 import { findSessionUser, getSessionCookieName, serializeUser } from "./auth.mjs";
@@ -26,6 +28,8 @@ import { ensureUploadDirectory, getUploadLocalDir } from "./storage.mjs";
 const app = express();
 const env = getEnv();
 const port = env.API_PORT;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distPath = path.resolve(__dirname, "../dist");
 const configuredOrigins = env.CORS_ALLOWED_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean);
 const allowedOrigins = new Set(configuredOrigins);
 
@@ -63,6 +67,10 @@ app.use(express.json());
 app.use(cookieParser());
 ensureUploadDirectory();
 app.use("/uploads", express.static(getUploadLocalDir()));
+
+if (env.NODE_ENV === "production") {
+  app.use(express.static(distPath));
+}
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, environment: env.NODE_ENV });
@@ -131,6 +139,13 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/mrp", mrpRoutes);
 app.use("/api/sync", syncRoutes);
+
+if (env.NODE_ENV === "production") {
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api")) return next();
+    return res.sendFile(path.join(distPath, "index.html"));
+  });
+}
 
 app.use((error, _req, res, _next) => {
   logError("request.error", error, {

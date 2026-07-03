@@ -223,6 +223,7 @@ describe("settings route", () => {
 
   it("creates users and writes audit logs", async () => {
     const route = (await import("../../server/routes/settings.mjs")).default;
+    prisma.user.findMany.mockResolvedValue([{ employeeCode: "U001" }, { employeeCode: "ADMIN-001" }]);
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.department.findUnique.mockResolvedValue({
       id: "dep-1",
@@ -246,7 +247,6 @@ describe("settings route", () => {
 
     const { res } = await invokeRoute(route, "post", "/users", {
       body: {
-        employeeCode: "EMP-2",
         name: "New User",
         email: "NEW@YKAPPAREL.COM",
         password: "password123",
@@ -260,7 +260,7 @@ describe("settings route", () => {
     expect(res.statusCode).toBe(201);
     expect(prisma.user.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        employeeCode: "EMP-2",
+        employeeCode: "U002",
         name: "New User",
         email: "new@ykapparel.com",
         role: "MERCHANDISER",
@@ -275,13 +275,11 @@ describe("settings route", () => {
 
   it("rejects duplicate user emails", async () => {
     const route = (await import("../../server/routes/settings.mjs")).default;
-    prisma.user.findUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: "existing", email: "new@ykapparel.com" });
+    prisma.user.findMany.mockResolvedValue([{ employeeCode: "U001" }]);
+    prisma.user.findUnique.mockResolvedValue({ id: "existing", email: "new@ykapparel.com" });
 
     const { res } = await invokeRoute(route, "post", "/users", {
       body: {
-        employeeCode: "EMP-2",
         name: "New User",
         email: "new@ykapparel.com",
         password: "password123",

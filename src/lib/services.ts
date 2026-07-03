@@ -852,7 +852,6 @@ export async function updateSettingsUser(employeeCode: string, payload: { role: 
 }
 
 export async function createSettingsUser(payload: {
-  employeeCode: string;
   name: string;
   email: string;
   password: string;

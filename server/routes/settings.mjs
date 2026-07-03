@@ -26,7 +26,6 @@ const userSchema = z.object({
 });
 
 const createUserSchema = userSchema.extend({
-  employeeCode: z.string().trim().min(2).max(32),
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(160).transform((value) => value.toLowerCase()),
   password: z.string().min(8).max(128),
@@ -51,6 +50,18 @@ function mapRole(value) {
 function formatLastActive(date) {
   if (!date) return "Never";
   return date.toISOString().slice(0, 16).replace("T", " ");
+}
+
+async function nextEmployeeCode() {
+  const users = await prisma.user.findMany({
+    select: { employeeCode: true },
+  });
+  const nextNumber = users.reduce((max, user) => {
+    const match = /^U(\d+)$/i.exec(user.employeeCode);
+    if (!match) return max;
+    return Math.max(max, Number(match[1]));
+  }, 0) + 1;
+  return `U${String(nextNumber).padStart(3, "0")}`;
 }
 
 router.get("/", asyncHandler(async (_req, res) => {
@@ -242,16 +253,13 @@ router.post("/users", requireRoles("ADMIN"), asyncHandler(async (req, res) => {
     return fail(res, 400, "Invalid user payload", "INVALID_USER_PAYLOAD", parsed.error.flatten());
   }
 
-  const [existingByCode, existingByEmail, department, shift] = await Promise.all([
-    prisma.user.findUnique({ where: { employeeCode: parsed.data.employeeCode } }),
+  const [employeeCode, existingByEmail, department, shift] = await Promise.all([
+    nextEmployeeCode(),
     prisma.user.findUnique({ where: { email: parsed.data.email } }),
     parsed.data.departmentCode ? prisma.department.findUnique({ where: { code: parsed.data.departmentCode } }) : Promise.resolve(null),
     parsed.data.shiftCode ? prisma.shift.findUnique({ where: { code: parsed.data.shiftCode } }) : Promise.resolve(null),
   ]);
 
-  if (existingByCode) {
-    return fail(res, 409, "Employee code already exists", "USER_CODE_EXISTS");
-  }
   if (existingByEmail) {
     return fail(res, 409, "Email already exists", "USER_EMAIL_EXISTS");
   }
@@ -264,7 +272,7 @@ router.post("/users", requireRoles("ADMIN"), asyncHandler(async (req, res) => {
 
   const created = await prisma.user.create({
     data: {
-      employeeCode: parsed.data.employeeCode,
+      employeeCode,
       name: parsed.data.name,
       email: parsed.data.email,
       passwordHash: await bcrypt.hash(parsed.data.password, 10),

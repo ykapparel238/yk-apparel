@@ -51,7 +51,6 @@ const userSchema = z.object({
   shiftCode: z.string().optional(),
 });
 const createUserSchema = userSchema.extend({
-  employeeCode: z.string().trim().min(2, "Employee code is required"),
   name: z.string().trim().min(2, "Name is required"),
   email: z.string().trim().email("Enter a valid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
@@ -110,7 +109,7 @@ export default function Settings() {
   });
   const createUserForm = useForm<z.infer<typeof createUserSchema>>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: { employeeCode: "", name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" },
+    defaultValues: { name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" },
   });
   const desktopDeviceForm = useForm<z.infer<typeof desktopDeviceSchema>>({
     resolver: zodResolver(desktopDeviceSchema),
@@ -157,7 +156,6 @@ export default function Settings() {
   const createUserMutation = useMutation({
     mutationFn: (values: z.infer<typeof createUserSchema>) =>
       createSettingsUser({
-        employeeCode: values.employeeCode,
         name: values.name,
         email: values.email,
         password: values.password,
@@ -169,7 +167,7 @@ export default function Settings() {
     onSuccess: async () => {
       toast.success("User created");
       setEditor(null);
-      createUserForm.reset({ employeeCode: "", name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" });
+      createUserForm.reset({ name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" });
       await refresh();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to create user"),
@@ -209,7 +207,7 @@ export default function Settings() {
         shiftCode: next.item.shiftCode ?? "",
       });
     } else if (next.kind === "userCreate") {
-      createUserForm.reset({ employeeCode: "", name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" });
+      createUserForm.reset({ name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" });
     } else {
       desktopDeviceForm.reset({
         status: next.item.status as "ACTIVE" | "RESTRICTED" | "LOCKED" | "REVOKED",
@@ -511,7 +509,6 @@ export default function Settings() {
           ) : editor?.kind === "userCreate" ? (
             <Form {...createUserForm}>
               <form onSubmit={createUserForm.handleSubmit((values) => createUserMutation.mutate(values))} className="space-y-4">
-                <SimpleField form={createUserForm} name="employeeCode" label="Employee Code" disabled={createUserMutation.isPending} />
                 <SimpleField form={createUserForm} name="name" label="Name" disabled={createUserMutation.isPending} />
                 <SimpleField form={createUserForm} name="email" label="Email" type="email" disabled={createUserMutation.isPending} />
                 <SimpleField form={createUserForm} name="password" label="Temporary Password" type="password" disabled={createUserMutation.isPending} />

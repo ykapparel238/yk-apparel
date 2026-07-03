@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
+import { PoAttachmentUploader } from "@/components/PoAttachmentUploader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +42,7 @@ import {
   fetchOrders,
   updateOrder,
 } from "@/lib/services";
+import { uploadPoAttachments, type PendingPoUpload } from "@/lib/assetUploads";
 import type { OrderItem, OrderOption } from "@/lib/types";
 import {
   Download,
@@ -150,6 +152,7 @@ export default function Orders() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<OrderItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OrderItem | null>(null);
+  const [pendingUploads, setPendingUploads] = useState<PendingPoUpload[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -185,6 +188,7 @@ export default function Orders() {
   const resetForm = () => {
     form.reset(emptyFormValues);
     setEditingOrder(null);
+    setPendingUploads([]);
   };
 
   const openCreate = () => {
@@ -270,15 +274,27 @@ export default function Orders() {
       return createOrder(values);
     },
     onSuccess: async ({ item }) => {
-      toast.success(editingOrder ? "Purchase Order updated" : "Purchase Order created", {
-        description: editingOrder
+      const wasEditing = Boolean(editingOrder);
+      if (!wasEditing && pendingUploads.length) {
+        try {
+          await uploadPoAttachments(item.id, pendingUploads);
+        } catch (error) {
+          toast.error("PO created, but files did not upload", {
+            description: error instanceof Error ? error.message : "Open the PO and try uploading again.",
+          });
+        }
+      }
+      toast.success(wasEditing ? "Purchase Order updated" : "Purchase Order created", {
+        description: wasEditing
           ? "PO changes have been saved."
-          : "New PO has been queued for planning.",
+          : pendingUploads.length
+            ? "New PO and attachments have been queued for planning."
+            : "New PO has been queued for planning.",
       });
       await invalidateOrders();
       setSheetOpen(false);
       resetForm();
-      if (!editingOrder) navigate(`/orders/${item.id}`);
+      if (!wasEditing) navigate(`/orders/${item.id}`);
     },
     onError: (error) => {
       toast.error(editingOrder ? "Unable to update purchase order" : "Unable to create purchase order", {
@@ -508,6 +524,18 @@ export default function Orders() {
                           <FormMessage className="text-[11px]" />
                         </Field>
                       )}
+                    />
+                    <PoAttachmentUploader
+                      orderId={editingOrder?.id}
+                      value={pendingUploads}
+                      onChange={setPendingUploads}
+                      contexts={["SIZE_CHART", "SAMPLE_PHOTO", "OTHER"]}
+                      defaultContext="SIZE_CHART"
+                      title={editingOrder ? "Upload PO files" : "Add PO files"}
+                      sourceType="purchase_order"
+                      sourceId={editingOrder?.id ?? null}
+                      compact
+                      onUploaded={() => invalidateOrders()}
                     />
                     <div className="rounded-lg border border-border bg-muted/20 p-3">
                       <div className="text-xs font-medium mb-2">Size Breakdown (%)</div>

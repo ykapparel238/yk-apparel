@@ -3,7 +3,7 @@ import { z } from "zod";
 import { writeAuditLog } from "../audit.mjs";
 import { prisma } from "../db.mjs";
 import { ApiError, asyncHandler, fail, ok } from "../http.mjs";
-import { mapStyleTechPack, styleTechPackInclude } from "../style-tech-pack.mjs";
+import { mapFileAsset, mapStyleTechPack, styleTechPackInclude } from "../style-tech-pack.mjs";
 import { enforceWorkflowEditLimit, recordWorkflowEditLock } from "../workflow-control.mjs";
 
 const router = Router();
@@ -139,6 +139,215 @@ function validateLifecycle(existing, nextStatus, quantity) {
   if (nextStatus === "DISPATCHED" && existing.deliveredQty < quantity) {
     throw new ApiError(409, "Orders can only be marked dispatched once delivered quantity matches the order quantity", "INVALID_ORDER_STATUS");
   }
+}
+
+function makeAction(label, route, state = {}) {
+  return { label, route, state };
+}
+
+function buildLifecycle(order, techPack) {
+  const hasTechPack = Boolean(
+    techPack?.assets?.length ||
+    techPack?.samples?.length ||
+    techPack?.measurements?.length ||
+    techPack?.threadSpecs?.length,
+  );
+  const hasBom = order.style.bomItems.length > 0;
+  const hasSizeAllocations = order.sizeAllocations.length > 0 || order.style.sizes.length > 0;
+  const hasColorAllocations = order.colorAllocations.length > 0 || order.style.colors.length > 0;
+  const materialShortages = order.style.bomItems
+    .map((item) => {
+      const requiredQty = Number(item.quantityPerPiece) * order.quantity;
+      const availableQty = Number(item.material.stockQty) - Number(item.material.allocatedQty ?? 0);
+      return {
+        material: item.material.name,
+        requiredQty,
+        availableQty,
+        shortageQty: Math.max(0, requiredQty - availableQty),
+        uom: item.uom,
+      };
+    })
+    .filter((item) => item.shortageQty > 0);
+
+  const risks = [];
+  if (!hasTechPack) {
+    risks.push({ severity: "warning", module: "Readiness", message: "Style tech pack is incomplete or has no linked assets/specs." });
+  }
+  if (!hasBom) {
+    risks.push({ severity: "critical", module: "Readiness", message: "BOM is missing, so material readiness cannot be confirmed." });
+  }
+  if (!hasSizeAllocations || !hasColorAllocations) {
+    risks.push({ severity: "warning", module: "Readiness", message: "Size or colour allocations are missing." });
+  }
+  materialShortages.slice(0, 3).forEach((item) => {
+    risks.push({
+      severity: "critical",
+      module: "Inventory",
+      message: `${item.material} short by ${item.shortageQty.toLocaleString("en-IN")} ${item.uom}.`,
+    });
+  });
+
+  const activePlan = order.productionPlans.find((plan) => plan.status === "ACTIVE") ?? order.productionPlans[0] ?? null;
+  if (!activePlan) {
+    risks.push({ severity: "warning", module: "Planning", message: "No production plan is allocated for this order." });
+  }
+
+  const productionTotals = order.productionEntries.reduce(
+    (acc, entry) => {
+      acc.plannedQty += entry.plannedQty;
+      acc.actualQty += entry.actualQty;
+      acc.rejectedQty += entry.rejectedQty;
+      acc.downtimeMinutes += entry.downtimeMinutes;
+      const stage = acc.byStage.get(entry.stage) ?? { plannedQty: 0, actualQty: 0, rejectedQty: 0, downtimeMinutes: 0 };
+      stage.plannedQty += entry.plannedQty;
+      stage.actualQty += entry.actualQty;
+      stage.rejectedQty += entry.rejectedQty;
+      stage.downtimeMinutes += entry.downtimeMinutes;
+      acc.byStage.set(entry.stage, stage);
+      if (!acc.latestEntryDate || entry.metricDate > acc.latestEntryDate) acc.latestEntryDate = entry.metricDate;
+      return acc;
+    },
+    { plannedQty: 0, actualQty: 0, rejectedQty: 0, downtimeMinutes: 0, latestEntryDate: null, byStage: new Map() },
+  );
+  const productionStages = Array.from(productionTotals.byStage.entries()).map(([stage, values]) => ({
+    stage,
+    label: mapStatus(stage),
+    ...values,
+  }));
+  const currentStage = productionStages.length ? productionStages[productionStages.length - 1] : null;
+  if (activePlan && !order.productionEntries.length) {
+    risks.push({ severity: "info", module: "Production", message: "Plan exists, but no production actuals have been recorded yet." });
+  }
+  if (productionTotals.rejectedQty > 0) {
+    risks.push({ severity: "warning", module: "Production", message: `${productionTotals.rejectedQty.toLocaleString("en-IN")} units rejected in production actuals.` });
+  }
+
+  const qaTotals = order.qaInspections.reduce(
+    (acc, inspection) => {
+      acc.checkedQty += inspection.checkedQty;
+      acc.approvedQty += inspection.approvedQty;
+      acc.rejectedQty += inspection.rejectedQty;
+      acc.reworkQty += inspection.reworkQty;
+      if (!acc.latestInspectionDate || inspection.inspectedAt > acc.latestInspectionDate) acc.latestInspectionDate = inspection.inspectedAt;
+      return acc;
+    },
+    { checkedQty: 0, approvedQty: 0, rejectedQty: 0, reworkQty: 0, latestInspectionDate: null },
+  );
+  const openCapaCount = order.correctiveActions.filter((item) => item.status !== "CLOSED").length;
+  if (productionTotals.actualQty > 0 && qaTotals.checkedQty === 0) {
+    risks.push({ severity: "warning", module: "QA", message: "Production has started, but no QA inspection is linked to this order." });
+  }
+  if (openCapaCount > 0) {
+    risks.push({ severity: "critical", module: "QA", message: `${openCapaCount} open CAPA action${openCapaCount === 1 ? "" : "s"} linked to this order.` });
+  }
+
+  const latestShipment = order.shipments[0] ?? null;
+  const shippedQty = order.shipments
+    .filter((shipment) => shipment.status !== "CANCELLED")
+    .reduce((sum, shipment) => sum + shipment.quantity, 0);
+  const remainingQty = Math.max(0, order.quantity - shippedQty);
+  if (qaTotals.checkedQty > 0 && remainingQty > 0 && order.status !== "READY_TO_DISPATCH" && order.status !== "DISPATCHED") {
+    risks.push({ severity: "info", module: "Dispatch", message: "QA activity exists, but the order is not marked ready to dispatch yet." });
+  }
+
+  const readinessBlocked = !hasBom || materialShortages.length > 0;
+  const readinessComplete = hasTechPack && hasBom && hasSizeAllocations && hasColorAllocations && materialShortages.length === 0;
+  const planningComplete = Boolean(activePlan);
+  const productionComplete = productionTotals.actualQty >= order.quantity || ["QA", "READY_TO_DISPATCH", "DISPATCHED"].includes(order.status);
+  const qaComplete = qaTotals.checkedQty > 0 && openCapaCount === 0 && ["READY_TO_DISPATCH", "DISPATCHED"].includes(order.status);
+  const dispatchComplete = remainingQty === 0 || order.status === "DISPATCHED";
+
+  const steps = [
+    {
+      key: "readiness",
+      label: "Readiness",
+      status: readinessBlocked ? "blocked" : readinessComplete ? "complete" : "in_progress",
+      summary: readinessComplete ? "Tech pack, BOM, allocations, and material stock are ready." : "Check specs, BOM, allocations, and material availability before production.",
+      metrics: {
+        hasTechPack,
+        hasBom,
+        hasSizeAllocations,
+        hasColorAllocations,
+        materialShortageCount: materialShortages.length,
+      },
+      action: makeAction("Review masters", "/masters", { focus: "styles", styleId: order.styleId }),
+    },
+    {
+      key: "planning",
+      label: "Planning",
+      status: planningComplete ? "complete" : readinessBlocked ? "blocked" : "not_started",
+      summary: activePlan ? `${activePlan.line.name} from ${activePlan.startDate.toISOString().slice(0, 10)} to ${activePlan.endDate.toISOString().slice(0, 10)}.` : "No line and date window allocated yet.",
+      metrics: activePlan
+        ? {
+            planId: activePlan.id,
+            lineId: activePlan.lineId,
+            lineName: activePlan.line.name,
+            startDate: activePlan.startDate.toISOString().slice(0, 10),
+            endDate: activePlan.endDate.toISOString().slice(0, 10),
+            plannedQty: activePlan.plannedQty,
+            dailyTarget: activePlan.dailyTarget ?? 0,
+          }
+        : {},
+      action: makeAction(activePlan ? "Update plan" : "Create plan", "/planning", { openPlanForOrderId: order.id }),
+    },
+    {
+      key: "production",
+      label: "Production",
+      status: productionComplete ? "complete" : order.productionEntries.length ? "in_progress" : planningComplete ? "not_started" : "blocked",
+      summary: order.productionEntries.length ? `${productionTotals.actualQty.toLocaleString("en-IN")} units recorded through ${currentStage?.label ?? "production"}.` : "No shift actuals recorded yet.",
+      metrics: {
+        plannedQty: productionTotals.plannedQty,
+        actualQty: productionTotals.actualQty,
+        rejectedQty: productionTotals.rejectedQty,
+        downtimeMinutes: productionTotals.downtimeMinutes,
+        latestEntryDate: productionTotals.latestEntryDate?.toISOString().slice(0, 10) ?? null,
+        currentStage: currentStage?.stage ?? null,
+        stages: productionStages,
+      },
+      action: makeAction("Add actuals", "/production", { openProductionForOrderId: order.id }),
+    },
+    {
+      key: "qa",
+      label: "QA",
+      status: qaComplete ? "complete" : qaTotals.checkedQty > 0 ? (openCapaCount > 0 ? "blocked" : "in_progress") : productionTotals.actualQty > 0 ? "not_started" : "blocked",
+      summary: qaTotals.checkedQty ? `${qaTotals.checkedQty.toLocaleString("en-IN")} checked, ${qaTotals.rejectedQty.toLocaleString("en-IN")} rejected.` : "No linked QA inspection yet.",
+      metrics: {
+        checkedQty: qaTotals.checkedQty,
+        approvedQty: qaTotals.approvedQty,
+        rejectedQty: qaTotals.rejectedQty,
+        reworkQty: qaTotals.reworkQty,
+        openCapaCount,
+        latestInspectionDate: qaTotals.latestInspectionDate?.toISOString().slice(0, 10) ?? null,
+      },
+      action: makeAction("Add inspection", "/qa", { openInspectionForOrderId: order.id }),
+    },
+    {
+      key: "dispatch",
+      label: "Dispatch",
+      status: dispatchComplete ? "complete" : order.status === "READY_TO_DISPATCH" || shippedQty > 0 ? "in_progress" : qaTotals.checkedQty > 0 ? "not_started" : "blocked",
+      summary: remainingQty === 0 ? "Order is fully dispatched." : `${remainingQty.toLocaleString("en-IN")} units remaining to dispatch.`,
+      metrics: {
+        shippedQty,
+        remainingQty,
+        latestShipment: latestShipment
+          ? {
+              id: latestShipment.id,
+              dispatchDate: latestShipment.dispatchDate.toISOString().slice(0, 10),
+              quantity: latestShipment.quantity,
+              invoiceNumber: latestShipment.invoiceNumber ?? null,
+              status: mapStatus(latestShipment.status),
+            }
+          : null,
+      },
+      action: makeAction("Schedule dispatch", "/dispatch", { openDispatchForOrderId: order.id }),
+    },
+  ];
+
+  const nextAction = steps.find((step) => step.status === "blocked" && step.key !== "readiness")?.action
+    ?? steps.find((step) => step.status === "not_started" || step.status === "in_progress")?.action
+    ?? null;
+
+  return { steps, risks, nextAction };
 }
 
 async function resolveOrderReferences(orderId, data) {
@@ -435,6 +644,20 @@ router.get("/:id", asyncHandler(async (req, res) => {
       },
       colorAllocations: true,
       sizeAllocations: true,
+      productionPlans: {
+        include: { line: true },
+        orderBy: { startDate: "asc" },
+      },
+      productionEntries: {
+        orderBy: [{ metricDate: "asc" }, { createdAt: "asc" }],
+      },
+      qaInspections: {
+        orderBy: { inspectedAt: "asc" },
+      },
+      shipments: {
+        orderBy: { createdAt: "desc" },
+      },
+      correctiveActions: true,
       challans: {
         include: { vendor: true },
         orderBy: { challanDate: "asc" },
@@ -450,6 +673,11 @@ router.get("/:id", asyncHandler(async (req, res) => {
     where: { entityType: "STYLE", entityId: order.styleId },
     orderBy: { createdAt: "desc" },
   });
+  const orderAssets = await prisma.fileAsset.findMany({
+    where: { entityType: "ORDER", entityId: order.id },
+    orderBy: { createdAt: "desc" },
+  });
+  const techPack = mapStyleTechPack(order.style, styleAssets);
 
   return ok(res, {
     item: mapOrder(order),
@@ -482,7 +710,9 @@ router.get("/:id", asyncHandler(async (req, res) => {
       rejected: challan.rejectedQty,
       status: mapStatus(challan.status),
     })),
-    techPack: mapStyleTechPack(order.style, styleAssets),
+    techPack,
+    attachments: orderAssets.map(mapFileAsset),
+    lifecycle: buildLifecycle(order, techPack),
   });
 }));
 

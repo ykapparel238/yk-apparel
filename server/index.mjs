@@ -15,6 +15,7 @@ import dispatchRoutes from "./routes/dispatch.mjs";
 import dashboardRoutes from "./routes/dashboard.mjs";
 import inventoryRoutes from "./routes/inventory.mjs";
 import mastersRoutes from "./routes/masters.mjs";
+import mobileRoutes from "./routes/mobile.mjs";
 import mrpRoutes from "./routes/mrp.mjs";
 import ordersRoutes from "./routes/orders.mjs";
 import planningRoutes from "./routes/planning.mjs";
@@ -68,8 +69,10 @@ app.use(
 app.use(requestLogger);
 app.use(express.json());
 app.use(cookieParser());
-ensureUploadDirectory();
-app.use("/uploads", express.static(getUploadLocalDir()));
+if (env.UPLOAD_STORAGE_DRIVER === "local") {
+  ensureUploadDirectory();
+  app.use("/uploads", express.static(getUploadLocalDir()));
+}
 
 if (env.NODE_ENV === "production") {
   app.use(express.static(distPath));
@@ -114,7 +117,7 @@ app.use("/api", (req, res, next) => {
   const role = req.sessionUser?.role;
   const policies = [
     { prefix: "/masters", roles: ["ADMIN"] },
-    { prefix: "/assets", roles: ["ADMIN"] },
+    { prefix: "/assets", roles: ["ADMIN", "FACTORY_MANAGER", "PRODUCTION_PLANNER", "MERCHANDISER", "QA_MANAGER", "STORE_MANAGER", "LINE_SUPERVISOR", "VENDOR_MANAGER", "DISPATCH_MANAGER"] },
     { prefix: "/settings", roles: ["ADMIN"] },
     { prefix: "/inventory", roles: ["ADMIN", "STORE_MANAGER"] },
     { prefix: "/qa", roles: ["ADMIN", "QA_MANAGER"] },
@@ -136,6 +139,7 @@ app.use("/api/orders", ordersRoutes);
 app.use("/api/change-requests", changeRequestRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/mobile", mobileRoutes);
 app.use("/api/assets", assetsRoutes);
 app.use("/api/masters", mastersRoutes);
 app.use("/api/planning", planningRoutes);

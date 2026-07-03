@@ -351,6 +351,10 @@ model FileAsset {
   entityType     AssetEntityType
   entityId       String
   kind           AssetKind
+  context        String?
+  caption        String?
+  sourceType     String?
+  sourceId       String?
   originalName   String
   mimeType       String
   sizeBytes      Int

@@ -1,0 +1,19 @@
+{
+  "name": "KnitCraft MES",
+  "short_name": "KnitCraft",
+  "description": "Mobile daily production tasks for textile factory teams.",
+  "start_url": "/mobile",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8faf7",
+  "theme_color": "#0f766e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

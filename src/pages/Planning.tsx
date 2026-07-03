@@ -30,9 +30,9 @@ import {
 } from "@/components/ui/sheet";
 import { createPlan, fetchPlanningBoard, updatePlan } from "@/lib/services";
 import { Calendar, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -59,9 +59,11 @@ const emptyValues: PlanFormInput = {
 export default function Planning() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string>("");
+  const routeState = location.state as { openPlanForOrderId?: string } | null;
 
   const boardQuery = useQuery({
     queryKey: ["planning-board"],
@@ -82,7 +84,7 @@ export default function Planning() {
   const selectedOrder = board?.orders.find((order) => order.id === form.watch("orderId"));
   const selectedAllocation = selectedOrder ? allocationsByOrder.get(selectedOrder.id) : undefined;
 
-  const openPlanSheet = (orderId = "") => {
+  const openPlanSheet = useCallback((orderId = "") => {
     setSelectedOrderId(orderId);
     const allocation = orderId ? allocationsByOrder.get(orderId) : undefined;
     const order = board?.orders.find((item) => item.id === orderId);
@@ -105,13 +107,19 @@ export default function Planning() {
           },
     );
     setOpen(true);
-  };
+  }, [allocationsByOrder, board?.orders, form]);
 
   const closePlanSheet = () => {
     setOpen(false);
     setSelectedOrderId("");
     form.reset(emptyValues);
   };
+
+  useEffect(() => {
+    if (!board || !routeState?.openPlanForOrderId) return;
+    openPlanSheet(routeState.openPlanForOrderId);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [board, routeState?.openPlanForOrderId, openPlanSheet, navigate, location.pathname]);
 
   const planMutation = useMutation({
     mutationFn: async (values: PlanFormInput) => {

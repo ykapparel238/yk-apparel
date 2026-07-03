@@ -48,6 +48,9 @@ export function toPublicAssetUrl(storagePath) {
   const env = getEnv();
   if (env.UPLOAD_STORAGE_DRIVER === "s3") {
     const key = storagePath.split(path.sep).join("/");
+    if (env.S3_PUBLIC_BASE_URL) {
+      return `${env.S3_PUBLIC_BASE_URL.replace(/\/$/, "")}/${key}`;
+    }
     if (env.S3_ENDPOINT) {
       return `${env.S3_ENDPOINT.replace(/\/$/, "")}/${env.S3_BUCKET}/${key}`;
     }

@@ -122,6 +122,59 @@ describe("assets route", () => {
     );
   });
 
+  it("allows production users to upload PO report photos", async () => {
+    const route = (await import("../../server/routes/assets.mjs")).default;
+    prisma.purchaseOrder.findUnique.mockResolvedValue({ id: "ord-1", poNumber: "PO-1" });
+    writeAssetBinary.mockResolvedValue({
+      storagePath: "order/ord-1/cutting-report.jpg",
+      publicUrl: "/uploads/order/ord-1/cutting-report.jpg",
+    });
+    prisma.fileAsset.create.mockResolvedValue({
+      id: "asset-po-1",
+      entityType: "ORDER",
+      entityId: "ord-1",
+      kind: "ATTACHMENT",
+      context: "CUTTING_REPORT",
+      caption: "Morning cutting sheet",
+      sourceType: "production_entry",
+      sourceId: "entry-1",
+      originalName: "cutting-report.jpg",
+      mimeType: "image/jpeg",
+      sizeBytes: 4,
+      storagePath: "order/ord-1/cutting-report.jpg",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    const { res } = await invokeRoute(route, "post", "/", {
+      sessionUser: { id: "u2", role: "LINE_SUPERVISOR" },
+      body: {
+        entityType: "ORDER",
+        entityId: "ord-1",
+        kind: "ATTACHMENT",
+        context: "CUTTING_REPORT",
+        caption: "Morning cutting sheet",
+        sourceType: "production_entry",
+        sourceId: "entry-1",
+        fileName: "cutting-report.jpg",
+        mimeType: "image/jpeg",
+        dataBase64: Buffer.from("test").toString("base64"),
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.item).toMatchObject({
+      entityType: "ORDER",
+      context: "CUTTING_REPORT",
+      caption: "Morning cutting sheet",
+    });
+    expect(prisma.fileAsset.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        context: "CUTTING_REPORT",
+        uploadedByUserId: "u2",
+      }),
+    });
+  });
+
   it("returns uploaded asset metadata", async () => {
     const route = (await import("../../server/routes/assets.mjs")).default;
     prisma.fileAsset.findUnique.mockResolvedValue({

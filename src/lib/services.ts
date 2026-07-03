@@ -41,9 +41,11 @@ import type {
   ReportRowsPayload,
   SettingsPayload,
   NotificationsPayload,
+  MobileTodayPayload,
   SearchPayload,
   StyleColorwayItem,
   StyleMeasurementSpecItem,
+  PoAttachmentContext,
   StyleSampleItem,
   StyleTechPackPayload,
   StyleThreadSpecItem,
@@ -327,6 +329,10 @@ export async function uploadAsset(payload: {
   entityType: "STYLE" | "STYLE_SAMPLE" | "ORDER";
   entityId: string;
   kind: "SAMPLE_IMAGE" | "REFERENCE_IMAGE" | "TECH_PACK" | "ATTACHMENT";
+  context?: PoAttachmentContext;
+  caption?: string;
+  sourceType?: string | null;
+  sourceId?: string | null;
   fileName: string;
   mimeType: string;
   dataBase64: string;
@@ -940,4 +946,8 @@ export async function fetchGlobalSearch(q: string) {
 
 export async function fetchNotifications() {
   return api<NotificationsPayload>("/api/notifications");
+}
+
+export async function fetchMobileToday() {
+  return api<MobileTodayPayload>("/api/mobile/today");
 }

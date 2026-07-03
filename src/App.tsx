@@ -24,10 +24,13 @@ const Dispatch = lazy(() => import("./pages/Dispatch"));
 const Masters = lazy(() => import("./pages/Masters"));
 const Reports = lazy(() => import("./pages/Reports"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Mobile = lazy(() => import("./pages/Mobile"));
 const Login = lazy(() => import("./pages/Login"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
+
+const isMobileViewport = () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
   <AppLayout>{children}</AppLayout>
@@ -41,6 +44,9 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
+  if (location.pathname === "/" && isMobileViewport()) {
+    return <Navigate to="/mobile" replace />;
+  }
 
   return <>{children}</>;
 };
@@ -50,7 +56,7 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (!isReady) return null;
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={isMobileViewport() ? "/mobile" : "/"} replace />;
   }
 
   return <>{children}</>;
@@ -86,6 +92,7 @@ const App = () => (
                 <Route path="/masters" element={<ProtectedRoute><Shell><Masters /></Shell></ProtectedRoute>} />
                 <Route path="/reports" element={<ProtectedRoute><Shell><Reports /></Shell></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Shell><Settings /></Shell></ProtectedRoute>} />
+                <Route path="/mobile" element={<ProtectedRoute><Mobile /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

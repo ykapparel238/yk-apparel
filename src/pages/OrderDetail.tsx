@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
+import { PoAttachmentUploader } from "@/components/PoAttachmentUploader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { fetchOrderDetail, fetchProductionStages } from "@/lib/services";
-import { ArrowLeft, Download, FileText, Pencil, Printer, Trash2 } from "lucide-react";
+import { fetchOrderDetail } from "@/lib/services";
+import type { OrderDetailPayload } from "@/lib/types";
+import { poAttachmentLabel } from "@/lib/poAttachmentContexts";
+import { AlertTriangle, ArrowLeft, CheckCircle2, CircleDot, Download, FileText, Image, Pencil, PlayCircle, Printer, Trash2 } from "lucide-react";
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -14,10 +17,6 @@ export default function OrderDetail() {
     queryKey: ["order-detail", id],
     queryFn: () => fetchOrderDetail(id!),
     enabled: Boolean(id),
-  });
-  const productionStagesQuery = useQuery({
-    queryKey: ["production-stages"],
-    queryFn: fetchProductionStages,
   });
 
   if (orderQuery.isLoading) {
@@ -34,7 +33,14 @@ export default function OrderDetail() {
   const bom = orderQuery.data.bom;
   const orderChallans = orderQuery.data.challans;
   const techPack = orderQuery.data.techPack;
-  const productionStages = productionStagesQuery.data?.items ?? [];
+  const lifecycle = orderQuery.data.lifecycle;
+  const attachments = orderQuery.data.attachments ?? [];
+  const groupedAttachments = attachments.reduce<Record<string, typeof attachments>>((groups, asset) => {
+    const key = asset.context ?? "OTHER";
+    groups[key] = groups[key] ?? [];
+    groups[key].push(asset);
+    return groups;
+  }, {});
 
   return (
     <div>
@@ -171,39 +177,7 @@ export default function OrderDetail() {
           </div>
         </div>
 
-        {/* Stage timeline */}
-        <div className="bg-card border border-border rounded-lg p-5">
-          <h3 className="text-sm font-semibold mb-1">Stage Timeline</h3>
-          <p className="text-xs text-muted-foreground mb-4">Order progression</p>
-          <ol className="relative border-l border-border ml-1.5 space-y-3">
-            {productionStages.slice(0, 8).map((s, i) => {
-              const done = i < Math.floor(order.progress / 12);
-              return (
-                <li key={s.stage} className="ml-4">
-                  <span
-                    className={`absolute -left-[5px] flex h-2.5 w-2.5 rounded-full ${
-                      done ? "bg-success" : "bg-muted border border-border"
-                    }`}
-                  />
-                  <div className="flex items-center justify-between text-xs">
-                    <span
-                      className={
-                        done ? "font-medium" : "text-muted-foreground"
-                      }
-                    >
-                      {s.stage}
-                    </span>
-                    {done && (
-                      <span className="text-[10px] text-success font-mono-num">
-                        ✓ done
-                      </span>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+        <LifecycleCommandView lifecycle={lifecycle} onAction={(action) => navigate(action.route, { state: action.state })} />
       </div>
 
       {techPack && (
@@ -329,6 +303,61 @@ export default function OrderDetail() {
         </div>
       )}
 
+      <div className="bg-card border border-border rounded-lg overflow-hidden mb-6">
+        <div className="p-5 border-b border-border flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold">Reports & Photos</h3>
+            <p className="text-xs text-muted-foreground">
+              PO-level size charts, sample photos, and handwritten reports from production, QA, packing, and dispatch.
+            </p>
+          </div>
+          <div className="md:w-[420px]">
+            <PoAttachmentUploader
+              orderId={order.id}
+              contexts={["SIZE_CHART", "SAMPLE_PHOTO", "CUTTING_REPORT", "STITCHING_REPORT", "WASHING_REPORT", "QA_REPORT", "PACKING_REPORT", "DISPATCH_REPORT", "OTHER"]}
+              defaultContext="OTHER"
+              sourceType="order_detail"
+              sourceId={order.id}
+              title="Upload PO file"
+              compact
+              onUploaded={() => orderQuery.refetch()}
+            />
+          </div>
+        </div>
+        {attachments.length ? (
+          <div className="grid gap-4 p-5 lg:grid-cols-2">
+            {Object.entries(groupedAttachments).map(([context, items]) => (
+              <div key={context} className="rounded-md border border-border p-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">{poAttachmentLabel(context)}</h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {items.map((asset) => (
+                    <div key={asset.id} className="rounded-md border border-border p-3 text-xs">
+                      <div className="flex items-start gap-2">
+                        {asset.mimeType.startsWith("image/") ? <Image className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" /> : <FileText className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />}
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{asset.fileName}</p>
+                          <p className="text-muted-foreground">{asset.caption || new Date(asset.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      {asset.mimeType.startsWith("image/") && (
+                        <img src={asset.url} alt={asset.fileName} className="mt-3 h-28 w-full rounded-md border border-border object-cover" />
+                      )}
+                      <a href={asset.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-primary underline-offset-4 hover:underline">
+                        Open file
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-xs text-muted-foreground">
+            No PO report photos or size-chart files uploaded yet.
+          </div>
+        )}
+      </div>
+
       {/* BOM */}
       <div className="bg-card border border-border rounded-lg overflow-hidden mb-6">
         <div className="p-5 border-b border-border">
@@ -422,6 +451,202 @@ export default function OrderDetail() {
       </div>
     </div>
   );
+}
+
+type Lifecycle = NonNullable<OrderDetailPayload["lifecycle"]>;
+type LifecycleAction = NonNullable<Lifecycle["nextAction"]>;
+
+function LifecycleCommandView({
+  lifecycle,
+  onAction,
+}: {
+  lifecycle?: Lifecycle;
+  onAction: (action: LifecycleAction) => void;
+}) {
+  if (!lifecycle) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-5">
+        <h3 className="text-sm font-semibold mb-1">Lifecycle Command</h3>
+        <p className="text-xs text-muted-foreground">Lifecycle status is not available for this order.</p>
+      </div>
+    );
+  }
+
+  const productionStep = lifecycle.steps.find((step) => step.key === "production");
+  const productionStages = Array.isArray(productionStep?.metrics.stages)
+    ? productionStep.metrics.stages as Array<{ stage: string; label: string; plannedQty: number; actualQty: number; rejectedQty: number; downtimeMinutes: number }>
+    : [];
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden lg:col-span-1">
+      <div className="p-5 border-b border-border">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Lifecycle Command</h3>
+            <p className="text-xs text-muted-foreground">Readiness, production, QA, and dispatch for this PO</p>
+          </div>
+          {lifecycle.nextAction ? (
+            <Button size="sm" className="h-8 shrink-0" onClick={() => onAction(lifecycle.nextAction!)}>
+              <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
+              {lifecycle.nextAction.label}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="p-5 space-y-4">
+        <div className="space-y-2.5">
+          {lifecycle.steps.map((step) => (
+            <div key={step.key} className="rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <LifecycleIcon status={step.status} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs font-semibold">{step.label}</div>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${statusClass(step.status)}`}>
+                        {step.status.replaceAll("_", " ")}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground leading-snug">{step.summary}</p>
+                  </div>
+                </div>
+                {step.action ? (
+                  <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" onClick={() => onAction(step.action!)}>
+                    {step.action.label}
+                  </Button>
+                ) : null}
+              </div>
+              <LifecycleMetrics step={step} />
+            </div>
+          ))}
+        </div>
+
+        {productionStages.length ? (
+          <div className="rounded-md border border-border overflow-hidden">
+            <div className="px-3 py-2 border-b border-border text-xs font-semibold">Order Stage Actuals</div>
+            <div className="divide-y divide-border">
+              {productionStages.map((stage) => {
+                const pct = stage.plannedQty ? Math.min(100, Math.round((stage.actualQty / stage.plannedQty) * 100)) : 0;
+                return (
+                  <div key={stage.stage} className="px-3 py-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium">{stage.label}</span>
+                      <span className="font-mono-num text-muted-foreground">{stage.actualQty.toLocaleString("en-IN")} / {stage.plannedQty.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <div className="text-xs font-semibold">Risks & Blockers</div>
+          {lifecycle.risks.length ? lifecycle.risks.map((risk, index) => (
+            <div key={`${risk.module}-${index}`} className={`rounded-md border px-3 py-2 text-xs ${riskClass(risk.severity)}`}>
+              <span className="font-semibold">{risk.module}:</span> {risk.message}
+            </div>
+          )) : (
+            <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              No active lifecycle risks detected.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LifecycleMetrics({ step }: { step: Lifecycle["steps"][number] }) {
+  const metrics = step.metrics;
+  const items =
+    step.key === "readiness"
+      ? [
+          ["Tech pack", yesNo(metrics.hasTechPack)],
+          ["BOM", yesNo(metrics.hasBom)],
+          ["Shortages", String(numberMetric(metrics.materialShortageCount))],
+        ]
+      : step.key === "planning"
+      ? [
+          ["Line", stringMetric(metrics.lineName, "Unplanned")],
+          ["Daily", fmtMaybe(metrics.dailyTarget)],
+          ["Qty", fmtMaybe(metrics.plannedQty)],
+        ]
+      : step.key === "production"
+      ? [
+          ["Actual", fmtMaybe(metrics.actualQty)],
+          ["Reject", fmtMaybe(metrics.rejectedQty)],
+          ["DT", `${numberMetric(metrics.downtimeMinutes)}m`],
+        ]
+      : step.key === "qa"
+      ? [
+          ["Checked", fmtMaybe(metrics.checkedQty)],
+          ["Reject", fmtMaybe(metrics.rejectedQty)],
+          ["CAPA", String(numberMetric(metrics.openCapaCount))],
+        ]
+      : [
+          ["Shipped", fmtMaybe(metrics.shippedQty)],
+          ["Balance", fmtMaybe(metrics.remainingQty)],
+          ["Latest", latestShipmentLabel(metrics.latestShipment)],
+        ];
+
+  return (
+    <div className="mt-3 grid grid-cols-3 gap-2">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded bg-background/60 px-2 py-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+          <div className="mt-0.5 truncate text-xs font-semibold font-mono-num">{value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LifecycleIcon({ status }: { status: Lifecycle["steps"][number]["status"] }) {
+  if (status === "complete") return <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />;
+  if (status === "blocked") return <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />;
+  if (status === "in_progress") return <PlayCircle className="mt-0.5 h-4 w-4 shrink-0 text-info" />;
+  return <CircleDot className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />;
+}
+
+function statusClass(status: Lifecycle["steps"][number]["status"]) {
+  if (status === "complete") return "bg-success/10 text-success";
+  if (status === "blocked") return "bg-destructive/10 text-destructive";
+  if (status === "in_progress") return "bg-info/10 text-info";
+  return "bg-muted text-muted-foreground";
+}
+
+function riskClass(severity: Lifecycle["risks"][number]["severity"]) {
+  if (severity === "critical") return "border-destructive/40 bg-destructive/10 text-destructive";
+  if (severity === "warning") return "border-warning/40 bg-warning/10 text-warning";
+  return "border-info/40 bg-info/10 text-info";
+}
+
+function yesNo(value: unknown) {
+  return value ? "Yes" : "No";
+}
+
+function numberMetric(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stringMetric(value: unknown, fallback: string) {
+  return typeof value === "string" && value.length ? value : fallback;
+}
+
+function fmtMaybe(value: unknown) {
+  const number = numberMetric(value);
+  return number ? number.toLocaleString("en-IN") : "0";
+}
+
+function latestShipmentLabel(value: unknown) {
+  if (!value || typeof value !== "object") return "None";
+  const shipment = value as { dispatchDate?: string; quantity?: number };
+  return shipment.dispatchDate ? `${shipment.dispatchDate} (${(shipment.quantity ?? 0).toLocaleString("en-IN")})` : "None";
 }
 
 function Stat({

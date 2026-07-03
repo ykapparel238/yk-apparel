@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
+import { PoAttachmentUploader } from "@/components/PoAttachmentUploader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,10 +29,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createShipment, fetchDispatch, updateShipment } from "@/lib/services";
+import { uploadPoAttachments, type PendingPoUpload } from "@/lib/assetUploads";
 import type { DispatchItem } from "@/lib/types";
 import { Truck, FileText } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -45,9 +48,13 @@ const shipmentSchema = z.object({
 type ShipmentInput = z.infer<typeof shipmentSchema>;
 
 export default function Dispatch() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [target, setTarget] = useState<DispatchItem | null>(null);
   const [editingShipmentId, setEditingShipmentId] = useState<string | null>(null);
+  const [reportUploads, setReportUploads] = useState<PendingPoUpload[]>([]);
   const queryClient = useQueryClient();
+  const routeState = location.state as { openDispatchForOrderId?: string } | null;
   const dispatchQuery = useQuery({
     queryKey: ["dispatch"],
     queryFn: fetchDispatch,
@@ -62,19 +69,22 @@ export default function Dispatch() {
   const resetDialog = () => {
     setTarget(null);
     setEditingShipmentId(null);
+    setReportUploads([]);
     form.reset({ dispatchDate: "", quantity: undefined, invoiceNumber: "", status: "SCHEDULED" });
   };
 
-  const openCreate = (order: DispatchItem) => {
+  const openCreate = useCallback((order: DispatchItem) => {
     setTarget(order);
     setEditingShipmentId(null);
+    setReportUploads([]);
     form.reset({ dispatchDate: "", quantity: order.remaining || undefined, invoiceNumber: "", status: "SCHEDULED" });
-  };
+  }, [form]);
 
   const openEdit = (order: DispatchItem) => {
     if (!order.latestShipment) return;
     setTarget(order);
     setEditingShipmentId(order.latestShipment.id);
+    setReportUploads([]);
     form.reset({
       dispatchDate: order.latestShipment.dispatchDate,
       quantity: order.latestShipment.quantity,
@@ -102,6 +112,15 @@ export default function Dispatch() {
       });
     },
     onSuccess: async () => {
+      if (target?.id && reportUploads.length) {
+        try {
+          await uploadPoAttachments(target.id, reportUploads);
+        } catch (error) {
+          toast.error("Shipment saved, but report photo did not upload", {
+            description: error instanceof Error ? error.message : "Open the PO and try uploading again.",
+          });
+        }
+      }
       toast.success(editingShipmentId ? "Shipment updated" : "Dispatch scheduled", {
         description: editingShipmentId ? "Shipment changes have been saved." : "Shipment has been recorded.",
       });
@@ -117,6 +136,15 @@ export default function Dispatch() {
     },
   });
 
+  const ready = useMemo(() => dispatchQuery.data?.items ?? [], [dispatchQuery.data?.items]);
+
+  useEffect(() => {
+    if (!routeState?.openDispatchForOrderId) return;
+    const order = ready.find((item) => item.id === routeState.openDispatchForOrderId);
+    if (order) openCreate(order);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [routeState?.openDispatchForOrderId, ready, openCreate, navigate, location.pathname]);
+
   if (dispatchQuery.isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground">Loading dispatch...</div>;
   }
@@ -124,8 +152,6 @@ export default function Dispatch() {
   if (dispatchQuery.isError || !dispatchQuery.data) {
     return <div className="p-8 text-center text-sm text-destructive">Unable to load dispatch.</div>;
   }
-
-  const ready = dispatchQuery.data.items;
 
   return (
     <div>
@@ -261,6 +287,16 @@ export default function Dispatch() {
                     <FormMessage className="text-[11px]" />
                   </Field>
                 )}
+              />
+              <PoAttachmentUploader
+                value={reportUploads}
+                onChange={setReportUploads}
+                contexts={["PACKING_REPORT", "DISPATCH_REPORT", "OTHER"]}
+                defaultContext="DISPATCH_REPORT"
+                sourceType="dispatch_shipment"
+                sourceId={editingShipmentId}
+                title="Attach packing/dispatch photo"
+                compact
               />
               {target?.shipments?.length ? (
                 <div className="rounded-lg border border-border bg-muted/20 p-3">

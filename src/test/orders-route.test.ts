@@ -231,9 +231,14 @@ describe("orders route", () => {
       },
       colorAllocations: [],
       sizeAllocations: [],
+      productionPlans: [],
+      productionEntries: [],
+      qaInspections: [],
+      shipments: [],
+      correctiveActions: [],
       challans: [],
     });
-    prisma.fileAsset.findMany.mockResolvedValue([{
+    prisma.fileAsset.findMany.mockResolvedValueOnce([{
       id: "asset-1",
       entityType: "STYLE",
       entityId: "style-1",
@@ -243,6 +248,20 @@ describe("orders route", () => {
       sizeBytes: 1000,
       storagePath: "style/style-1/spec.pdf",
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    }]).mockResolvedValueOnce([{
+      id: "asset-order-1",
+      entityType: "ORDER",
+      entityId: "ord-3",
+      kind: "ATTACHMENT",
+      context: "QA_REPORT",
+      caption: "Inline inspection sheet",
+      sourceType: "qa_inspection",
+      sourceId: "qa-1",
+      originalName: "qa-report.jpg",
+      mimeType: "image/jpeg",
+      sizeBytes: 2000,
+      storagePath: "order/ord-3/qa-report.jpg",
+      createdAt: new Date("2026-01-02T00:00:00.000Z"),
     }]);
 
     const { res } = await invokeRoute(route, "get", "/:id", {
@@ -255,6 +274,196 @@ describe("orders route", () => {
       assets: [{ fileName: "spec.pdf" }],
       measurements: [{ sizeLabel: "M", measurementPoint: "Chest" }],
       threadSpecs: [{ materialName: "Cotton" }],
+    });
+    expect(res.body.attachments).toEqual([
+      expect.objectContaining({
+        fileName: "qa-report.jpg",
+        context: "QA_REPORT",
+        caption: "Inline inspection sheet",
+      }),
+    ]);
+  });
+
+  it("returns lifecycle blockers for a new order without planning", async () => {
+    const route = (await import("../../server/routes/orders.mjs")).default;
+    prisma.purchaseOrder.findUnique.mockResolvedValue({
+      id: "ord-4",
+      poNumber: "PO-4",
+      brandId: "b1",
+      styleId: "style-2",
+      seasonCode: "AW25",
+      quantity: 100,
+      deliveredQty: 0,
+      dueDate: new Date("2026-05-20T00:00:00.000Z"),
+      status: "CREATED",
+      priority: "MEDIUM",
+      brand: { name: "Brand A" },
+      style: {
+        id: "style-2",
+        code: "ST-2",
+        name: "Cardigan",
+        sizes: [{ label: "M" }],
+        colors: [{ name: "Black", hexCode: "#111111" }],
+        bomItems: [],
+        samples: [],
+        measurementSpecs: [],
+        threadSpecs: [],
+      },
+      colorAllocations: [],
+      sizeAllocations: [],
+      productionPlans: [],
+      productionEntries: [],
+      qaInspections: [],
+      shipments: [],
+      correctiveActions: [],
+      challans: [],
+    });
+    prisma.fileAsset.findMany.mockResolvedValue([]);
+
+    const { res } = await invokeRoute(route, "get", "/:id", {
+      params: { id: "ord-4" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.lifecycle.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "readiness", status: "blocked" }),
+      expect.objectContaining({ key: "planning", status: "blocked" }),
+    ]));
+    expect(res.body.lifecycle.risks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ module: "Readiness", message: expect.stringContaining("BOM is missing") }),
+      expect.objectContaining({ module: "Planning", message: expect.stringContaining("No production plan") }),
+    ]));
+  });
+
+  it("reconciles order lifecycle from plan, production, QA, dispatch, CAPA, and shortages", async () => {
+    const route = (await import("../../server/routes/orders.mjs")).default;
+    prisma.purchaseOrder.findUnique.mockResolvedValue({
+      id: "ord-5",
+      poNumber: "PO-5",
+      brandId: "b1",
+      styleId: "style-3",
+      seasonCode: "AW25",
+      quantity: 100,
+      deliveredQty: 40,
+      dueDate: new Date("2026-05-20T00:00:00.000Z"),
+      status: "QA",
+      priority: "HIGH",
+      brand: { name: "Brand A" },
+      style: {
+        id: "style-3",
+        code: "ST-3",
+        name: "Pullover",
+        sizes: [{ label: "M" }],
+        colors: [{ name: "Navy", hexCode: "#123456" }],
+        bomItems: [{
+          id: "bom-1",
+          quantityPerPiece: 2,
+          uom: "kg",
+          material: {
+            name: "Cotton Yarn",
+            type: "YARN",
+            stockQty: 120,
+            allocatedQty: 20,
+            supplier: { name: "Supplier A" },
+          },
+        }],
+        samples: [{
+          id: "sample-1",
+          sampleType: "PROTO",
+          status: "APPROVED",
+          notes: "Approved",
+          approvedByUserId: "u1",
+          approvedAt: new Date("2026-01-01T00:00:00.000Z"),
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          assets: [],
+        }],
+        measurementSpecs: [],
+        threadSpecs: [],
+      },
+      colorAllocations: [{ colorName: "Navy", hexCode: "#123456", percent: 100 }],
+      sizeAllocations: [{ sizeLabel: "M", percent: 100 }],
+      productionPlans: [{
+        id: "plan-1",
+        orderId: "ord-5",
+        lineId: "line-1",
+        startDate: new Date("2026-05-01T00:00:00.000Z"),
+        endDate: new Date("2026-05-10T00:00:00.000Z"),
+        plannedQty: 100,
+        dailyTarget: 10,
+        status: "ACTIVE",
+        line: { id: "line-1", name: "Line 1" },
+      }],
+      productionEntries: [{
+        id: "entry-1",
+        metricDate: new Date("2026-05-02T00:00:00.000Z"),
+        createdAt: new Date("2026-05-02T10:00:00.000Z"),
+        stage: "KNITTING",
+        plannedQty: 80,
+        actualQty: 70,
+        rejectedQty: 3,
+        downtimeMinutes: 15,
+      }],
+      qaInspections: [{
+        id: "qa-1",
+        inspectedAt: new Date("2026-05-03T00:00:00.000Z"),
+        checkedQty: 50,
+        approvedQty: 45,
+        rejectedQty: 3,
+        reworkQty: 2,
+      }],
+      shipments: [{
+        id: "ship-1",
+        dispatchDate: new Date("2026-05-04T00:00:00.000Z"),
+        quantity: 40,
+        invoiceNumber: "INV-1",
+        status: "SCHEDULED",
+        createdAt: new Date("2026-05-04T09:00:00.000Z"),
+      }],
+      correctiveActions: [{ id: "capa-1", status: "OPEN" }],
+      challans: [],
+    });
+    prisma.fileAsset.findMany.mockResolvedValue([]);
+
+    const { res } = await invokeRoute(route, "get", "/:id", {
+      params: { id: "ord-5" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.lifecycle.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: "planning",
+        status: "complete",
+        metrics: expect.objectContaining({ lineName: "Line 1", plannedQty: 100, dailyTarget: 10 }),
+      }),
+      expect.objectContaining({
+        key: "production",
+        status: "complete",
+        metrics: expect.objectContaining({
+          actualQty: 70,
+          rejectedQty: 3,
+          downtimeMinutes: 15,
+          stages: [expect.objectContaining({ stage: "KNITTING", actualQty: 70 })],
+        }),
+      }),
+      expect.objectContaining({
+        key: "qa",
+        status: "blocked",
+        metrics: expect.objectContaining({ checkedQty: 50, openCapaCount: 1 }),
+      }),
+      expect.objectContaining({
+        key: "dispatch",
+        status: "in_progress",
+        metrics: expect.objectContaining({ shippedQty: 40, remainingQty: 60 }),
+      }),
+    ]));
+    expect(res.body.lifecycle.risks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ module: "Inventory", message: expect.stringContaining("Cotton Yarn short by 100 kg") }),
+      expect.objectContaining({ module: "QA", message: expect.stringContaining("1 open CAPA") }),
+    ]));
+    expect(res.body.lifecycle.nextAction).toMatchObject({
+      label: "Add inspection",
+      route: "/qa",
+      state: { openInspectionForOrderId: "ord-5" },
     });
   });
 });

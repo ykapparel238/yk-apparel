@@ -12,14 +12,47 @@ const createAssetSchema = z.object({
   entityType: z.enum(["STYLE", "STYLE_SAMPLE", "ORDER"]),
   entityId: z.string().min(1),
   kind: z.enum(["SAMPLE_IMAGE", "REFERENCE_IMAGE", "TECH_PACK", "ATTACHMENT"]),
+  context: z.enum([
+    "SIZE_CHART",
+    "SAMPLE_PHOTO",
+    "CUTTING_REPORT",
+    "STITCHING_REPORT",
+    "WASHING_REPORT",
+    "QA_REPORT",
+    "PACKING_REPORT",
+    "DISPATCH_REPORT",
+    "OTHER",
+  ]).optional(),
+  caption: z.string().max(240).optional().default(""),
+  sourceType: z.string().max(80).optional().nullable(),
+  sourceId: z.string().max(120).optional().nullable(),
   fileName: z.string().min(1),
   mimeType: z.string().min(1),
   dataBase64: z.string().min(1),
 });
 
+const uploadRoles = [
+  "ADMIN",
+  "FACTORY_MANAGER",
+  "PRODUCTION_PLANNER",
+  "MERCHANDISER",
+  "QA_MANAGER",
+  "STORE_MANAGER",
+  "LINE_SUPERVISOR",
+  "VENDOR_MANAGER",
+  "DISPATCH_MANAGER",
+];
+
+function canDeleteAsset(req, asset) {
+  if (req.sessionUser?.role === "ADMIN") return true;
+  if (!asset.uploadedByUserId || asset.uploadedByUserId !== req.sessionUser?.id) return false;
+  const ageMs = Date.now() - asset.createdAt.getTime();
+  return ageMs >= 0 && ageMs <= 24 * 60 * 60 * 1000;
+}
+
 router.post(
   "/",
-  requireRoles("ADMIN"),
+  requireRoles(...uploadRoles),
   asyncHandler(async (req, res) => {
     const parsed = createAssetSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -52,6 +85,10 @@ router.post(
         entityType: parsed.data.entityType,
         entityId: parsed.data.entityId,
         kind: parsed.data.kind,
+        context: parsed.data.context ?? null,
+        caption: parsed.data.caption?.trim() || null,
+        sourceType: parsed.data.sourceType ?? null,
+        sourceId: parsed.data.sourceId ?? null,
         originalName: parsed.data.fileName,
         mimeType: parsed.data.mimeType,
         sizeBytes: bytes.length,
@@ -85,11 +122,13 @@ router.get(
 
 router.delete(
   "/:id",
-  requireRoles("ADMIN"),
   asyncHandler(async (req, res) => {
     const asset = await prisma.fileAsset.findUnique({ where: { id: req.params.id } });
     if (!asset) {
       return fail(res, 404, "Asset not found", "ASSET_NOT_FOUND");
+    }
+    if (!canDeleteAsset(req, asset)) {
+      return fail(res, 403, "You do not have permission to delete this asset", "FORBIDDEN");
     }
 
     await prisma.$transaction(async (tx) => {

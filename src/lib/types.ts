@@ -74,6 +74,33 @@ export type OrderDetailPayload = {
     status: string;
   }>;
   techPack?: StyleTechPackPayload;
+  attachments?: FileAssetItem[];
+  lifecycle?: {
+    steps: Array<{
+      key: string;
+      label: string;
+      status: "not_started" | "blocked" | "in_progress" | "complete";
+      summary: string;
+      metrics: Record<string, unknown>;
+      action?: {
+        label: string;
+        route: string;
+        state?: Record<string, unknown>;
+        disabledReason?: string;
+      };
+    }>;
+    risks: Array<{
+      severity: "critical" | "warning" | "info";
+      module: string;
+      message: string;
+    }>;
+    nextAction: {
+      label: string;
+      route: string;
+      state?: Record<string, unknown>;
+      disabledReason?: string;
+    } | null;
+  };
 };
 
 export type PlanningLine = {
@@ -228,6 +255,10 @@ export type FileAssetItem = {
   entityType: "STYLE" | "STYLE_SAMPLE" | "ORDER";
   entityId: string;
   kind: "SAMPLE_IMAGE" | "REFERENCE_IMAGE" | "TECH_PACK" | "ATTACHMENT";
+  context?: PoAttachmentContext | null;
+  caption?: string;
+  sourceType?: string | null;
+  sourceId?: string | null;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
@@ -235,6 +266,17 @@ export type FileAssetItem = {
   url: string;
   createdAt: string;
 };
+
+export type PoAttachmentContext =
+  | "SIZE_CHART"
+  | "SAMPLE_PHOTO"
+  | "CUTTING_REPORT"
+  | "STITCHING_REPORT"
+  | "WASHING_REPORT"
+  | "QA_REPORT"
+  | "PACKING_REPORT"
+  | "DISPATCH_REPORT"
+  | "OTHER";
 
 export type StyleSampleItem = {
   id: string;
@@ -604,6 +646,45 @@ export type SearchPayload = {
 export type NotificationsPayload = {
   count: number;
   items: Array<{ id: string; severity: string; title: string; module: string; time: string; href: string }>;
+};
+
+export type MobileTodayPayload = {
+  date: string;
+  role: string;
+  greeting: string;
+  cards: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    count: number;
+    tone: string;
+    actions: Array<{ id: string; label: string; type: string; tone: string; defaults?: Record<string, string> }>;
+  }>;
+  actions: Array<{ id: string; label: string; type: string; tone: string; defaults?: Record<string, string> }>;
+  options: {
+    orders: Array<{ id: string; poNumber: string }>;
+    lines: Array<{ id: string; name: string }>;
+    shifts: Array<{ id: string; name: string }>;
+    downtimeReasons: Array<{ id: string; code: string; label: string }>;
+    defectTypes: Array<{ id: string; name: string }>;
+    vendors: Array<{ id: string; name: string }>;
+    qaInspections: Array<{ id: string; label: string }>;
+    materials: Array<{ id: string; sku: string; name: string; uom: string; supplier: string }>;
+    procurementRequests: Array<{ id: string; material: string; sku: string; requestedQty: number; status: string }>;
+    supplierPurchaseOrders: Array<{ id: string; poNumber: string; supplier: string; material: string; balanceQty: number }>;
+    dispatchOrders: Array<{ id: string; poNumber: string; brand: string; styleName: string; remaining: number; due: string }>;
+    dispatchShipments: Array<{ id: string; orderId: string; label: string; dispatchDate: string; quantity: number; invoiceNumber: string; status: string }>;
+    challans: Array<{ id: string; vendorId: string; vendor: string; challanNumber: string; orderPo: string; outQty: number; inQty: number; rejectedQty: number }>;
+  };
+  workItems: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    tone: string;
+    action: { id: string; label: string; type: string; tone: string; defaults?: Record<string, string> };
+  }>;
+  recent: Array<{ id: string; type: string; title: string; subtitle: string; route: string }>;
+  alerts: Array<{ id: string; title: string; severity: string; module: string; time: string }>;
 };
 
 export type ReportsPayload = {

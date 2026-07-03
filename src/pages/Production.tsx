@@ -1,15 +1,19 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
+import { PoAttachmentUploader } from "@/components/PoAttachmentUploader";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createProductionEntry, fetchProductionEntries, fetchProductionLines, fetchProductionStages, updateProductionEntry } from "@/lib/services";
+import { uploadPoAttachments, type PendingPoUpload } from "@/lib/assetUploads";
+import type { PoAttachmentContext } from "@/lib/types";
 import { Pencil, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -29,11 +33,22 @@ const entrySchema = z.object({
 
 type EntryInput = z.infer<typeof entrySchema>;
 
+function productionReportContext(stage: string): PoAttachmentContext {
+  if (stage === "WASHING" || stage === "DRYING") return "WASHING_REPORT";
+  if (stage === "LINKING") return "STITCHING_REPORT";
+  if (stage === "PACKING") return "PACKING_REPORT";
+  return "CUTTING_REPORT";
+}
+
 export default function Production() {
   const fmt = (n: number) => n.toLocaleString("en-IN");
+  const location = useLocation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [reportUploads, setReportUploads] = useState<PendingPoUpload[]>([]);
+  const routeState = location.state as { openProductionForOrderId?: string } | null;
   const stagesQuery = useQuery({
     queryKey: ["production-stages"],
     queryFn: fetchProductionStages,
@@ -74,10 +89,20 @@ export default function Production() {
       if (editingId) return updateProductionEntry(editingId, payload);
       return createProductionEntry(payload);
     },
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
+      if (variables.orderId && reportUploads.length) {
+        try {
+          await uploadPoAttachments(variables.orderId, reportUploads);
+        } catch (error) {
+          toast.error("Entry saved, but report photo did not upload", {
+            description: error instanceof Error ? error.message : "Open the PO and try uploading again.",
+          });
+        }
+      }
       toast.success(editingId ? "Production entry updated" : "Production entry created");
       setOpen(false);
       setEditingId(null);
+      setReportUploads([]);
       form.reset({
         metricDate: "",
         lineId: "",
@@ -104,24 +129,17 @@ export default function Production() {
     },
   });
 
-  if (stagesQuery.isLoading || linesQuery.isLoading || entriesQuery.isLoading) {
-    return <div className="p-8 text-center text-sm text-muted-foreground">Loading production floor...</div>;
-  }
-
-  if (stagesQuery.isError || linesQuery.isError || entriesQuery.isError || !stagesQuery.data || !linesQuery.data || !entriesQuery.data) {
-    return <div className="p-8 text-center text-sm text-destructive">Unable to load production floor.</div>;
-  }
-
-  const productionStages = stagesQuery.data.items;
-  const lines = linesQuery.data.items;
-  const entries = entriesQuery.data.items;
-  const downtimeReasons = entriesQuery.data.downtimeReasons;
-  const shifts = entriesQuery.data.shifts;
-  const orderOptions = entriesQuery.data.orders;
-  const lineOptions = entriesQuery.data.lines;
+  const productionStages = useMemo(() => stagesQuery.data?.items ?? [], [stagesQuery.data?.items]);
+  const lines = useMemo(() => linesQuery.data?.items ?? [], [linesQuery.data?.items]);
+  const entries = useMemo(() => entriesQuery.data?.items ?? [], [entriesQuery.data?.items]);
+  const downtimeReasons = useMemo(() => entriesQuery.data?.downtimeReasons ?? [], [entriesQuery.data?.downtimeReasons]);
+  const shifts = useMemo(() => entriesQuery.data?.shifts ?? [], [entriesQuery.data?.shifts]);
+  const orderOptions = useMemo(() => entriesQuery.data?.orders ?? [], [entriesQuery.data?.orders]);
+  const lineOptions = useMemo(() => entriesQuery.data?.lines ?? [], [entriesQuery.data?.lines]);
 
   const openCreate = () => {
     setEditingId(null);
+    setReportUploads([]);
     form.reset({
       metricDate: new Date().toISOString().slice(0, 10),
       lineId: lineOptions[0]?.id ?? "",
@@ -137,6 +155,35 @@ export default function Production() {
     });
     setOpen(true);
   };
+
+  useEffect(() => {
+    if (!routeState?.openProductionForOrderId) return;
+    const order = orderOptions.find((item) => item.id === routeState.openProductionForOrderId);
+    setEditingId(null);
+    form.reset({
+      metricDate: new Date().toISOString().slice(0, 10),
+      lineId: lineOptions[0]?.id ?? "",
+      orderId: order?.id ?? routeState.openProductionForOrderId,
+      shiftId: shifts[0]?.id ?? "",
+      stage: "KNITTING",
+      plannedQty: 0,
+      actualQty: 0,
+      rejectedQty: 0,
+      downtimeMinutes: 0,
+      downtimeReasonId: "",
+      remarks: "",
+    });
+    setOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [routeState?.openProductionForOrderId, orderOptions, lineOptions, shifts, form, navigate, location.pathname]);
+
+  if (stagesQuery.isLoading || linesQuery.isLoading || entriesQuery.isLoading) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">Loading production floor...</div>;
+  }
+
+  if (stagesQuery.isError || linesQuery.isError || entriesQuery.isError || !stagesQuery.data || !linesQuery.data || !entriesQuery.data) {
+    return <div className="p-8 text-center text-sm text-destructive">Unable to load production floor.</div>;
+  }
 
   return (
     <div>
@@ -263,6 +310,7 @@ export default function Production() {
                     className="h-8 w-8"
                     onClick={() => {
                       setEditingId(entry.id);
+                      setReportUploads([]);
                       form.reset({
                         metricDate: entry.metricDate,
                         lineId: entry.lineId,
@@ -388,6 +436,16 @@ export default function Production() {
                   <FormItem><FormLabel>Remarks</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
               </div>
+              <PoAttachmentUploader
+                value={reportUploads}
+                onChange={setReportUploads}
+                contexts={["CUTTING_REPORT", "STITCHING_REPORT", "WASHING_REPORT", "PACKING_REPORT", "OTHER"]}
+                defaultContext={productionReportContext(form.watch("stage"))}
+                sourceType="production_entry"
+                sourceId={editingId}
+                title="Attach handwritten report"
+                compact
+              />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={entryMutation.isPending}>{entryMutation.isPending ? "Saving..." : "Save Entry"}</Button>

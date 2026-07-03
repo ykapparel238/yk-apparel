@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { KpiCard } from "@/components/KpiCard";
+import { PoAttachmentUploader } from "@/components/PoAttachmentUploader";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,10 +29,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createCapa, createQaInspection, fetchQa, updateCapa, updateQaInspection } from "@/lib/services";
+import { uploadPoAttachments, type PendingPoUpload } from "@/lib/assetUploads";
 import { ShieldCheck, AlertOctagon, RotateCcw, CheckCircle2, Plus, Pencil } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -78,11 +81,15 @@ const stageOptions = [
 ];
 
 export default function QA() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [editingInspectionId, setEditingInspectionId] = useState<string | null>(null);
+  const [reportUploads, setReportUploads] = useState<PendingPoUpload[]>([]);
   const [capaOpen, setCapaOpen] = useState(false);
   const [editingCapaId, setEditingCapaId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const routeState = location.state as { openInspectionForOrderId?: string } | null;
   const qaQuery = useQuery({
     queryKey: ["qa"],
     queryFn: fetchQa,
@@ -122,6 +129,7 @@ export default function QA() {
   const resetForm = () => {
     setOpen(false);
     setEditingInspectionId(null);
+    setReportUploads([]);
     form.reset({
       inspectedAt: "",
       orderId: "",
@@ -156,7 +164,16 @@ export default function QA() {
       }
       return createQaInspection(payload);
     },
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
+      if (variables.orderId && reportUploads.length) {
+        try {
+          await uploadPoAttachments(variables.orderId, reportUploads);
+        } catch (error) {
+          toast.error("Inspection saved, but report photo did not upload", {
+            description: error instanceof Error ? error.message : "Open the PO and try uploading again.",
+          });
+        }
+      }
       toast.success(editingInspectionId ? "Inspection updated" : "Inspection created", {
         description: editingInspectionId ? "Inspection changes have been saved." : "QA metrics have been updated.",
       });
@@ -217,18 +234,18 @@ export default function QA() {
     },
   });
 
-  if (qaQuery.isLoading) {
-    return <div className="p-8 text-center text-sm text-muted-foreground">Loading QA...</div>;
-  }
-
-  if (qaQuery.isError || !qaQuery.data) {
-    return <div className="p-8 text-center text-sm text-destructive">Unable to load QA.</div>;
-  }
-
-  const { summary, defects, vendors, inspections, orderOptions, lineOptions, defectTypes, capaItems } = qaQuery.data;
+  const summary = qaQuery.data?.summary ?? { checked: 0, approved: 0, rejected: 0, rework: 0 };
+  const defects = useMemo(() => qaQuery.data?.defects ?? [], [qaQuery.data?.defects]);
+  const vendors = useMemo(() => qaQuery.data?.vendors ?? [], [qaQuery.data?.vendors]);
+  const inspections = useMemo(() => qaQuery.data?.inspections ?? [], [qaQuery.data?.inspections]);
+  const orderOptions = useMemo(() => qaQuery.data?.orderOptions ?? [], [qaQuery.data?.orderOptions]);
+  const lineOptions = useMemo(() => qaQuery.data?.lineOptions ?? [], [qaQuery.data?.lineOptions]);
+  const defectTypes = useMemo(() => qaQuery.data?.defectTypes ?? [], [qaQuery.data?.defectTypes]);
+  const capaItems = useMemo(() => qaQuery.data?.capaItems ?? [], [qaQuery.data?.capaItems]);
 
   const openCreate = () => {
     setEditingInspectionId(null);
+    setReportUploads([]);
     form.reset({
       inspectedAt: "",
       orderId: "",
@@ -245,8 +262,38 @@ export default function QA() {
     setOpen(true);
   };
 
+  useEffect(() => {
+    if (!routeState?.openInspectionForOrderId) return;
+    setEditingInspectionId(null);
+    setReportUploads([]);
+    form.reset({
+      inspectedAt: new Date().toISOString().slice(0, 10),
+      orderId: routeState.openInspectionForOrderId,
+      vendorId: "",
+      lineId: lineOptions[0]?.id ?? "",
+      stage: "QUALITY_CHECK",
+      checkedQty: undefined,
+      approvedQty: 0,
+      rejectedQty: 0,
+      reworkQty: 0,
+      defectTypeId: "",
+      defectCount: 0,
+    });
+    setOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [routeState?.openInspectionForOrderId, lineOptions, form, navigate, location.pathname]);
+
+  if (qaQuery.isLoading) {
+    return <div className="p-8 text-center text-sm text-muted-foreground">Loading QA...</div>;
+  }
+
+  if (qaQuery.isError || !qaQuery.data) {
+    return <div className="p-8 text-center text-sm text-destructive">Unable to load QA.</div>;
+  }
+
   const openEdit = (inspection: typeof inspections[number]) => {
     setEditingInspectionId(inspection.id);
+    setReportUploads([]);
     form.reset({
       inspectedAt: inspection.inspectedAt,
       orderId: inspection.orderId ?? "",
@@ -538,6 +585,16 @@ export default function QA() {
                   <Field label="Defect Count"><FormControl><Input type="number" {...field} /></FormControl><FormMessage className="text-[11px]" /></Field>
                 )} />
               </div>
+              <PoAttachmentUploader
+                value={reportUploads}
+                onChange={setReportUploads}
+                contexts={["QA_REPORT", "SAMPLE_PHOTO", "OTHER"]}
+                defaultContext="QA_REPORT"
+                sourceType="qa_inspection"
+                sourceId={editingInspectionId}
+                title="Attach inspection photo"
+                compact
+              />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>
                 <Button type="submit" disabled={inspectionMutation.isPending}>{inspectionMutation.isPending ? "Saving..." : editingInspectionId ? "Save Changes" : "Save Inspection"}</Button>

@@ -22,6 +22,7 @@ Required variables:
   - `S3_BUCKET`
   - `S3_REGION`
   - `S3_ENDPOINT`
+  - `S3_PUBLIC_BASE_URL`
   - `S3_ACCESS_KEY_ID`
   - `S3_SECRET_ACCESS_KEY`
 
@@ -149,10 +150,20 @@ Development can use local storage:
 - `UPLOAD_STORAGE_DRIVER=local`
 - `UPLOAD_LOCAL_DIR=uploads`
 
-Production should use S3-compatible object storage:
+Production should use S3-compatible object storage so PO report photos do not consume server disk:
 
 - `UPLOAD_STORAGE_DRIVER=s3`
 - set `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY`
 - set `S3_ENDPOINT` for MinIO, R2, Spaces, or another S3-compatible provider
+- set `S3_PUBLIC_BASE_URL` to the public bucket/custom-domain URL used by browsers for previews and downloads
+
+For Cloudflare R2 on Coolify/Hetzner:
+
+- create an R2 bucket for uploads
+- create an R2 API token with object read/write access to that bucket
+- use the R2 S3 endpoint for `S3_ENDPOINT`
+- use `S3_REGION=auto`
+- use the public `r2.dev` URL or custom domain for `S3_PUBLIC_BASE_URL`
+- do not mount `/app/uploads` as the primary production store
 
 If production uses local storage instead, the uploads directory must be a durable mounted volume and must be included in backup/restore operations.

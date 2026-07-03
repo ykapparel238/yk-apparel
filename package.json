@@ -28,6 +28,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "node prisma/seed.mjs",
+    "db:create-admin": "node prisma/create-admin.mjs",
     "db:setup": "npm run db:generate && npm run db:migrate && npm run db:seed"
   },
   "dependencies": {

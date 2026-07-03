@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
-import { fetchSettings, updateDepartment, updateDesktopDevice, updateSettingsUser, updateShift } from "@/lib/services";
+import { createSettingsUser, fetchSettings, updateDepartment, updateDesktopDevice, updateSettingsUser, updateShift } from "@/lib/services";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,6 +50,12 @@ const userSchema = z.object({
   departmentCode: z.string().optional(),
   shiftCode: z.string().optional(),
 });
+const createUserSchema = userSchema.extend({
+  employeeCode: z.string().trim().min(2, "Employee code is required"),
+  name: z.string().trim().min(2, "Name is required"),
+  email: z.string().trim().email("Enter a valid email"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
 const desktopDeviceSchema = z.object({
   status: z.enum(["ACTIVE", "RESTRICTED", "LOCKED", "REVOKED"]),
   rebuildRequired: z.boolean().default(false),
@@ -59,6 +65,7 @@ type EditorState =
   | { kind: "department"; item: { id: string; name: string; head: string; staff: number; lines: number } }
   | { kind: "shift"; item: { id: string; name: string; supervisor: string; headcount: number } }
   | { kind: "user"; item: { id: string; name: string; role: string; status: string; departmentCode?: string | null; shiftCode?: string | null } }
+  | { kind: "userCreate"; item: null }
   | { kind: "desktopDevice"; item: { id: string; clientVersion: string; workspaceId: string; status: string; rebuildRequired: boolean; lastSeenAt: string; conflicts: number } }
   | null;
 
@@ -100,6 +107,10 @@ export default function Settings() {
   const userForm = useForm<z.infer<typeof userSchema>>({
     resolver: zodResolver(userSchema),
     defaultValues: { role: "", status: "ACTIVE", departmentCode: "", shiftCode: "" },
+  });
+  const createUserForm = useForm<z.infer<typeof createUserSchema>>({
+    resolver: zodResolver(createUserSchema),
+    defaultValues: { employeeCode: "", name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" },
   });
   const desktopDeviceForm = useForm<z.infer<typeof desktopDeviceSchema>>({
     resolver: zodResolver(desktopDeviceSchema),
@@ -143,6 +154,26 @@ export default function Settings() {
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to update user"),
   });
+  const createUserMutation = useMutation({
+    mutationFn: (values: z.infer<typeof createUserSchema>) =>
+      createSettingsUser({
+        employeeCode: values.employeeCode,
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        role: values.role,
+        status: values.status,
+        departmentCode: values.departmentCode || null,
+        shiftCode: values.shiftCode || null,
+      }),
+    onSuccess: async () => {
+      toast.success("User created");
+      setEditor(null);
+      createUserForm.reset({ employeeCode: "", name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" });
+      await refresh();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to create user"),
+  });
   const desktopDeviceMutation = useMutation({
     mutationFn: (values: z.infer<typeof desktopDeviceSchema>) => updateDesktopDevice(getEditorId(editor, "desktopDevice"), values),
     onSuccess: async () => {
@@ -177,6 +208,8 @@ export default function Settings() {
         departmentCode: next.item.departmentCode ?? "",
         shiftCode: next.item.shiftCode ?? "",
       });
+    } else if (next.kind === "userCreate") {
+      createUserForm.reset({ employeeCode: "", name: "", email: "", password: "", role: "MERCHANDISER", status: "ACTIVE", departmentCode: "", shiftCode: "" });
     } else {
       desktopDeviceForm.reset({
         status: next.item.status as "ACTIVE" | "RESTRICTED" | "LOCKED" | "REVOKED",
@@ -192,8 +225,8 @@ export default function Settings() {
         title="Settings"
         description="Departments, shifts, users, roles and audit trail"
         actions={
-          <Button size="sm" className="h-9" onClick={() => toast("Use the row edit actions to update settings")}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add
+          <Button size="sm" className="h-9" onClick={() => openEditor({ kind: "userCreate", item: null })}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add User
           </Button>
         }
       />
@@ -389,9 +422,9 @@ export default function Settings() {
       <Dialog open={Boolean(editor)} onOpenChange={(open) => !open && setEditor(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Settings</DialogTitle>
+            <DialogTitle>{editor?.kind === "userCreate" ? "Add User" : "Edit Settings"}</DialogTitle>
             <DialogDescription>
-              {editor ? `Update ${editor.kind} settings.` : "Update settings."}
+              {editor?.kind === "userCreate" ? "Create a user account and assign role access." : editor ? `Update ${editor.kind} settings.` : "Update settings."}
             </DialogDescription>
           </DialogHeader>
           {editor?.kind === "department" ? (
@@ -472,6 +505,68 @@ export default function Settings() {
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancel</Button>
                   <Button type="submit" disabled={userMutation.isPending}>{userMutation.isPending ? "Saving..." : "Save Changes"}</Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          ) : editor?.kind === "userCreate" ? (
+            <Form {...createUserForm}>
+              <form onSubmit={createUserForm.handleSubmit((values) => createUserMutation.mutate(values))} className="space-y-4">
+                <SimpleField form={createUserForm} name="employeeCode" label="Employee Code" disabled={createUserMutation.isPending} />
+                <SimpleField form={createUserForm} name="name" label="Name" disabled={createUserMutation.isPending} />
+                <SimpleField form={createUserForm} name="email" label="Email" type="email" disabled={createUserMutation.isPending} />
+                <SimpleField form={createUserForm} name="password" label="Temporary Password" type="password" disabled={createUserMutation.isPending} />
+                <FormField control={createUserForm.control} name="role" render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Role</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={createUserMutation.isPending}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>{roleOptions.map((role) => <SelectItem key={role} value={role}>{role.replaceAll("_", " ")}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+                <FormField control={createUserForm.control} name="status" render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Status</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={createUserMutation.isPending}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="INACTIVE">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+                <FormField control={createUserForm.control} name="departmentCode" render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Department</FormLabel>
+                    <Select value={field.value || "__none"} onValueChange={(value) => field.onChange(value === "__none" ? "" : value)} disabled={createUserMutation.isPending}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none">None</SelectItem>
+                        {departments.map((department) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+                <FormField control={createUserForm.control} name="shiftCode" render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-medium">Shift</FormLabel>
+                    <Select value={field.value || "__none"} onValueChange={(value) => field.onChange(value === "__none" ? "" : value)} disabled={createUserMutation.isPending}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none">None</SelectItem>
+                        {shifts.map((shift) => <SelectItem key={shift.id} value={shift.id}>{shift.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )} />
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancel</Button>
+                  <Button type="submit" disabled={createUserMutation.isPending}>{createUserMutation.isPending ? "Creating..." : "Create User"}</Button>
                 </DialogFooter>
               </form>
             </Form>

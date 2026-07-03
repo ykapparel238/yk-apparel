@@ -851,6 +851,22 @@ export async function updateSettingsUser(employeeCode: string, payload: { role: 
   });
 }
 
+export async function createSettingsUser(payload: {
+  employeeCode: string;
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  status: "ACTIVE" | "INACTIVE";
+  departmentCode?: string | null;
+  shiftCode?: string | null;
+}) {
+  return api<{ item: SettingsPayload["users"][number] }>("/api/settings/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchDashboard() {
   return api<DashboardPayload>("/api/dashboard");
 }

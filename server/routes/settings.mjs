@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "../db.mjs";
 import { writeAuditLog } from "../audit.mjs";
@@ -22,6 +23,13 @@ const userSchema = z.object({
   status: z.enum(["ACTIVE", "INACTIVE"]),
   departmentCode: z.string().optional().nullable(),
   shiftCode: z.string().optional().nullable(),
+});
+
+const createUserSchema = userSchema.extend({
+  employeeCode: z.string().trim().min(2).max(32),
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(160).transform((value) => value.toLowerCase()),
+  password: z.string().min(8).max(128),
 });
 
 const desktopDeviceSchema = z.object({
@@ -226,6 +234,67 @@ router.patch("/shifts/:code", requireRoles("ADMIN"), asyncHandler(async (req, re
       headcount: updated.headcount,
     },
   });
+}));
+
+router.post("/users", requireRoles("ADMIN"), asyncHandler(async (req, res) => {
+  const parsed = createUserSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid user payload", "INVALID_USER_PAYLOAD", parsed.error.flatten());
+  }
+
+  const [existingByCode, existingByEmail, department, shift] = await Promise.all([
+    prisma.user.findUnique({ where: { employeeCode: parsed.data.employeeCode } }),
+    prisma.user.findUnique({ where: { email: parsed.data.email } }),
+    parsed.data.departmentCode ? prisma.department.findUnique({ where: { code: parsed.data.departmentCode } }) : Promise.resolve(null),
+    parsed.data.shiftCode ? prisma.shift.findUnique({ where: { code: parsed.data.shiftCode } }) : Promise.resolve(null),
+  ]);
+
+  if (existingByCode) {
+    return fail(res, 409, "Employee code already exists", "USER_CODE_EXISTS");
+  }
+  if (existingByEmail) {
+    return fail(res, 409, "Email already exists", "USER_EMAIL_EXISTS");
+  }
+  if (parsed.data.departmentCode && !department) {
+    return fail(res, 400, "Selected department not found", "DEPARTMENT_NOT_FOUND");
+  }
+  if (parsed.data.shiftCode && !shift) {
+    return fail(res, 400, "Selected shift not found", "SHIFT_NOT_FOUND");
+  }
+
+  const created = await prisma.user.create({
+    data: {
+      employeeCode: parsed.data.employeeCode,
+      name: parsed.data.name,
+      email: parsed.data.email,
+      passwordHash: await bcrypt.hash(parsed.data.password, 10),
+      role: parsed.data.role,
+      status: parsed.data.status,
+      departmentId: department?.id ?? null,
+      shiftId: shift?.id ?? null,
+    },
+  });
+
+  await writeAuditLog(req, {
+    module: "Settings",
+    action: "Created user",
+    targetType: "User",
+    targetId: created.id,
+    targetLabel: created.name,
+  });
+
+  return ok(res, {
+    item: {
+      id: created.employeeCode,
+      name: created.name,
+      email: created.email,
+      role: mapRole(created.role),
+      status: created.status === "ACTIVE" ? "Active" : "Inactive",
+      last: formatLastActive(created.lastActiveAt),
+      departmentCode: department?.code ?? null,
+      shiftCode: shift?.code ?? null,
+    },
+  }, 201);
 }));
 
 router.patch("/users/:employeeCode", requireRoles("ADMIN"), asyncHandler(async (req, res) => {

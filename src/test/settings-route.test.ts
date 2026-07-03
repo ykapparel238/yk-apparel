@@ -14,6 +14,7 @@ const prisma = {
   user: {
     findMany: vi.fn(),
     findUnique: vi.fn(),
+    create: vi.fn(),
     update: vi.fn(),
   },
   auditLog: {
@@ -218,6 +219,80 @@ describe("settings route", () => {
       },
     });
     expect(writeAuditLog).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ action: "Updated user role/status" }));
+  });
+
+  it("creates users and writes audit logs", async () => {
+    const route = (await import("../../server/routes/settings.mjs")).default;
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.department.findUnique.mockResolvedValue({
+      id: "dep-1",
+      code: "ADMIN",
+      name: "Administration",
+    });
+    prisma.shift.findUnique.mockResolvedValue({
+      id: "shift-1",
+      code: "GENERAL",
+      name: "General Shift",
+    });
+    prisma.user.create.mockResolvedValue({
+      id: "user-2",
+      employeeCode: "EMP-2",
+      name: "New User",
+      email: "new@ykapparel.com",
+      role: "MERCHANDISER",
+      status: "ACTIVE",
+      lastActiveAt: null,
+    });
+
+    const { res } = await invokeRoute(route, "post", "/users", {
+      body: {
+        employeeCode: "EMP-2",
+        name: "New User",
+        email: "NEW@YKAPPAREL.COM",
+        password: "password123",
+        role: "MERCHANDISER",
+        status: "ACTIVE",
+        departmentCode: "ADMIN",
+        shiftCode: "GENERAL",
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        employeeCode: "EMP-2",
+        name: "New User",
+        email: "new@ykapparel.com",
+        role: "MERCHANDISER",
+        status: "ACTIVE",
+        departmentId: "dep-1",
+        shiftId: "shift-1",
+      }),
+    });
+    expect(prisma.user.create.mock.calls[0][0].data.passwordHash).not.toBe("password123");
+    expect(writeAuditLog).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ action: "Created user" }));
+  });
+
+  it("rejects duplicate user emails", async () => {
+    const route = (await import("../../server/routes/settings.mjs")).default;
+    prisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "existing", email: "new@ykapparel.com" });
+
+    const { res } = await invokeRoute(route, "post", "/users", {
+      body: {
+        employeeCode: "EMP-2",
+        name: "New User",
+        email: "new@ykapparel.com",
+        password: "password123",
+        role: "MERCHANDISER",
+        status: "ACTIVE",
+      },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.code).toBe("USER_EMAIL_EXISTS");
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
   it("blocks non-admin writes", async () => {

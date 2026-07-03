@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.mjs";
 import { writeAuditLog } from "../audit.mjs";
 import { fail, ok, requireRoles, asyncHandler } from "../http.mjs";
+import { enforceWorkflowEditLimit, recordWorkflowEditLock } from "../workflow-control.mjs";
 
 const router = Router();
 
@@ -214,6 +215,9 @@ router.patch("/shipments/:id", requireRoles("ADMIN", "DISPATCH_MANAGER", "FACTOR
     return fail(res, 409, `Dispatch quantity exceeds remaining balance (${remaining.toLocaleString("en-IN")})`, "OVER_DISPATCH");
   }
 
+  const workflowMeta = { module: "dispatch", entityType: "DispatchShipment", entityId: shipment.id, operation: "update" };
+  await enforceWorkflowEditLimit(req, workflowMeta);
+
   await prisma.$transaction(async (tx) => {
     await tx.dispatchShipment.update({
       where: { id: shipment.id },
@@ -231,6 +235,7 @@ router.patch("/shipments/:id", requireRoles("ADMIN", "DISPATCH_MANAGER", "FACTOR
         status: deriveOrderStatus(nextDeliveredQty, shipment.order.quantity),
       },
     });
+    await recordWorkflowEditLock(req, workflowMeta, tx);
   });
 
   const updatedOrder = await getDispatchOrder(shipment.orderId);

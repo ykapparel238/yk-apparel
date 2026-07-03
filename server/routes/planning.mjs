@@ -3,6 +3,7 @@ import { z } from "zod";
 import { writeAuditLog } from "../audit.mjs";
 import { prisma } from "../db.mjs";
 import { asyncHandler, fail, ok } from "../http.mjs";
+import { enforceWorkflowEditLimit, recordWorkflowEditLock } from "../workflow-control.mjs";
 
 const router = Router();
 
@@ -239,6 +240,9 @@ router.patch("/plans/:id", asyncHandler(async (req, res) => {
     return fail(res, validated.error.status, validated.error.message, validated.error.code);
   }
 
+  const workflowMeta = { module: "planning", entityType: "ProductionPlan", entityId: existing.id, operation: "update" };
+  await enforceWorkflowEditLimit(req, workflowMeta);
+
   const updated = await prisma.$transaction(async (tx) => {
     const plan = await tx.productionPlan.update({
       where: { id: req.params.id },
@@ -271,6 +275,7 @@ router.patch("/plans/:id", asyncHandler(async (req, res) => {
       targetId: plan.id,
       targetLabel: `${plan.order.poNumber} -> ${plan.line.name}`,
     });
+    await recordWorkflowEditLock(req, workflowMeta, tx);
 
     return plan;
   });

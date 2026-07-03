@@ -142,6 +142,13 @@ enum StyleSampleStatus {
   REVISED
 }
 
+enum WorkflowChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 model Department {
   id         String  @id @default(cuid())
   code       String  @unique
@@ -187,6 +194,9 @@ model User {
   auditLogs    AuditLog[]
   sessions     Session[]
   procurementRequests ProcurementRequest[]
+  workflowEditLocks WorkflowEditLock[]
+  workflowChangeRequests WorkflowChangeRequest[] @relation("WorkflowChangeRequestRequester")
+  reviewedWorkflowChangeRequests WorkflowChangeRequest[] @relation("WorkflowChangeRequestReviewer")
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -777,6 +787,47 @@ model AuditLog {
   targetLabel  String
 
   actor        User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+}
+
+model WorkflowEditLock {
+  id          String   @id @default(cuid())
+  module      String
+  entityType  String
+  entityId    String
+  operation   String
+  actorUserId String?
+  createdAt   DateTime @default(now())
+
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([module, entityType, entityId, operation])
+  @@index([actorUserId])
+  @@index([module, entityType])
+}
+
+model WorkflowChangeRequest {
+  id             String                      @id @default(cuid())
+  module         String
+  entityType     String
+  entityId       String
+  operation      String
+  proposedPayload Json
+  reason         String
+  status         WorkflowChangeRequestStatus @default(PENDING)
+  requesterUserId String?
+  reviewerUserId  String?
+  reviewNote     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  requester      User?                       @relation("WorkflowChangeRequestRequester", fields: [requesterUserId], references: [id], onDelete: SetNull)
+  reviewer       User?                       @relation("WorkflowChangeRequestReviewer", fields: [reviewerUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([module, entityType, entityId])
+  @@index([requesterUserId])
+  @@index([reviewerUserId])
 }
 
 model Alert {

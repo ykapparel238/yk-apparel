@@ -14,6 +14,7 @@ import {
   readDesktopSnapshot,
   readDesktopOrRemote,
 } from "@/lib/desktopOfflineRepository";
+import { withWorkflowChangeRequest } from "@/lib/changeRequests";
 import type {
   CalendarPayload,
   MasterBrand,
@@ -188,10 +189,14 @@ export async function updatePlan(id: string, payload: {
       payload,
       baseVersion: allocation?.syncVersion ?? null,
     },
-    () => api<{ item: PlanningBoardPayload["allocations"][number] }>(`/api/planning/plans/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+    () => withWorkflowChangeRequest(
+      () => api<{ item: PlanningBoardPayload["allocations"][number] }>(`/api/planning/plans/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+      { module: "planning", entityType: "ProductionPlan", entityId: id, operation: "update" },
+      payload,
+    ),
   );
 }
 
@@ -510,10 +515,14 @@ export async function updateVendorChallan(
   challanId: string,
   payload: { inwardQty: number; rejectedQty: number },
 ) {
-  return api<{ item: VendorDetailPayload["challans"][number] }>(`/api/vendors/${vendorId}/challans/${challanId}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  return withWorkflowChangeRequest(
+    () => api<{ item: VendorDetailPayload["challans"][number] }>(`/api/vendors/${vendorId}/challans/${challanId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+    { module: "vendors", entityType: "VendorChallan", entityId: challanId, operation: "update" },
+    payload,
+  );
 }
 
 export async function fetchInventory() {
@@ -583,10 +592,14 @@ export async function updateProcurementRequest(id: string, payload: { requestedQ
       payload,
       baseVersion: item?.syncVersion ?? null,
     },
-    () => api<{ item: ProcurementRequestsPayload["items"][number] }>(`/api/inventory/procurement-requests/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+    () => withWorkflowChangeRequest(
+      () => api<{ item: ProcurementRequestsPayload["items"][number] }>(`/api/inventory/procurement-requests/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+      { module: "inventory", entityType: "ProcurementRequest", entityId: id, operation: "update" },
+      payload,
+    ),
   );
 }
 
@@ -608,10 +621,14 @@ export async function updateSupplierPurchaseOrder(id: string, payload: {
   note?: string | null;
   status?: "DRAFT" | "ISSUED" | "PARTIAL_RECEIVED" | "RECEIVED" | "CANCELLED";
 }) {
-  return api<{ item: ProcurementPurchaseOrdersPayload["items"][number] }>(`/api/inventory/purchase-orders/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  return withWorkflowChangeRequest(
+    () => api<{ item: ProcurementPurchaseOrdersPayload["items"][number] }>(`/api/inventory/purchase-orders/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+    { module: "inventory", entityType: "SupplierPurchaseOrder", entityId: id, operation: "update" },
+    payload,
+  );
 }
 
 export async function createGoodsReceipt(payload: {
@@ -670,10 +687,14 @@ export async function updateProductionEntry(id: string, payload: {
   downtimeReasonId?: string | null;
   remarks?: string | null;
 }) {
-  return api<{ item: ProductionEntriesPayload["items"][number] }>(`/api/production/entries/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  return withWorkflowChangeRequest(
+    () => api<{ item: ProductionEntriesPayload["items"][number] }>(`/api/production/entries/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+    { module: "production", entityType: "ProductionEntry", entityId: id, operation: "update" },
+    payload,
+  );
 }
 
 export async function createQaInspection(payload: {
@@ -725,10 +746,14 @@ export async function updateQaInspection(id: string, payload: {
       payload,
       baseVersion: inspection?.syncVersion ?? null,
     },
-    () => api<{ item: { id: string } }>(`/api/qa/inspections/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+    () => withWorkflowChangeRequest(
+      () => api<{ item: { id: string } }>(`/api/qa/inspections/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+      { module: "qa", entityType: "QaInspection", entityId: id, operation: "update" },
+      payload,
+    ),
   );
 }
 
@@ -760,10 +785,14 @@ export async function updateCapa(id: string, payload: {
   dueDate: string;
   status: "OPEN" | "IN_PROGRESS" | "CLOSED";
 }) {
-  return api<{ item: { id: string } }>(`/api/qa/capa/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  return withWorkflowChangeRequest(
+    () => api<{ item: { id: string } }>(`/api/qa/capa/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+    { module: "qa", entityType: "CorrectiveAction", entityId: id, operation: "update" },
+    payload,
+  );
 }
 
 export async function fetchDispatch() {
@@ -812,10 +841,14 @@ export async function updateShipment(id: string, payload: {
       payload,
       baseVersion: shipment?.syncVersion ?? null,
     },
-    () => api<{ item: DispatchPayload["items"][number] }>(`/api/dispatch/shipments/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+    () => withWorkflowChangeRequest(
+      () => api<{ item: DispatchPayload["items"][number] }>(`/api/dispatch/shipments/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+      { module: "dispatch", entityType: "DispatchShipment", entityId: id, operation: "update" },
+      payload,
+    ),
   );
 }
 

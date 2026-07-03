@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.mjs";
 import { writeAuditLog } from "../audit.mjs";
 import { fail, ok, requireRoles, asyncHandler } from "../http.mjs";
+import { enforceWorkflowEditLimit, recordWorkflowEditLock } from "../workflow-control.mjs";
 import { ACTIVE_ORDER_STATUSES } from "../constants.mjs";
 
 const router = Router();
@@ -264,6 +265,9 @@ router.patch(
       return fail(res, 404, "Inspection not found", "INSPECTION_NOT_FOUND");
     }
 
+    const workflowMeta = { module: "qa", entityType: "QaInspection", entityId: existing.id, operation: "update" };
+    await enforceWorkflowEditLimit(req, workflowMeta);
+
     const inspection = await prisma.$transaction(async (tx) => {
       const updated = await tx.qaInspection.update({
         where: { id: req.params.id },
@@ -292,6 +296,7 @@ router.patch(
           })),
         });
       }
+      await recordWorkflowEditLock(req, workflowMeta, tx);
 
       return updated;
     });
@@ -370,6 +375,9 @@ router.patch(
       return fail(res, 404, "CAPA not found", "CAPA_NOT_FOUND");
     }
 
+    const workflowMeta = { module: "qa", entityType: "CorrectiveAction", entityId: existing.id, operation: "update" };
+    await enforceWorkflowEditLimit(req, workflowMeta);
+
     const item = await prisma.correctiveAction.update({
       where: { id: req.params.id },
       data: {
@@ -392,6 +400,7 @@ router.patch(
       targetId: item.id,
       targetLabel: item.title,
     });
+    await recordWorkflowEditLock(req, workflowMeta);
 
     return ok(res, { item: { id: item.id } });
   }),

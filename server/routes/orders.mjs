@@ -4,6 +4,7 @@ import { writeAuditLog } from "../audit.mjs";
 import { prisma } from "../db.mjs";
 import { ApiError, asyncHandler, fail, ok } from "../http.mjs";
 import { mapStyleTechPack, styleTechPackInclude } from "../style-tech-pack.mjs";
+import { enforceWorkflowEditLimit, recordWorkflowEditLock } from "../workflow-control.mjs";
 
 const router = Router();
 
@@ -331,6 +332,8 @@ router.patch("/:id", asyncHandler(async (req, res) => {
 
   validateLifecycle(existing, data.status, data.quantity);
   const { sizeAllocations, colorAllocations } = await resolveOrderReferences(req.params.id, data);
+  const workflowMeta = { module: "orders", entityType: "PurchaseOrder", entityId: existing.id, operation: "update" };
+  await enforceWorkflowEditLimit(req, workflowMeta);
 
   const updated = await prisma.$transaction(async (tx) => {
     const order = await tx.purchaseOrder.update({
@@ -369,6 +372,7 @@ router.patch("/:id", asyncHandler(async (req, res) => {
       targetId: order.id,
       targetLabel: order.poNumber,
     });
+    await recordWorkflowEditLock(req, workflowMeta, tx);
 
     return order;
   });
@@ -395,6 +399,9 @@ router.delete("/:id", asyncHandler(async (req, res) => {
     return fail(res, 409, "Order cannot be deleted once execution records exist", "ORDER_HAS_EXECUTION_RECORDS");
   }
 
+  const workflowMeta = { module: "orders", entityType: "PurchaseOrder", entityId: order.id, operation: "delete" };
+  await enforceWorkflowEditLimit(req, workflowMeta);
+
   await prisma.$transaction(async (tx) => {
     await tx.purchaseOrder.delete({ where: { id: req.params.id } });
     await writeAuditLog(req, {
@@ -405,6 +412,7 @@ router.delete("/:id", asyncHandler(async (req, res) => {
       targetId: order.id,
       targetLabel: order.poNumber,
     });
+    await recordWorkflowEditLock(req, workflowMeta, tx);
   });
 
   return res.status(204).send();

@@ -5,6 +5,7 @@ import { writeAuditLog } from "../audit.mjs";
 import { fail, ok, requireRoles, asyncHandler } from "../http.mjs";
 import { buildMrpItems } from "./mrp.mjs";
 import { ACTIVE_ORDER_STATUSES } from "../constants.mjs";
+import { enforceWorkflowEditLimit, recordWorkflowEditLock } from "../workflow-control.mjs";
 
 const router = Router();
 
@@ -339,6 +340,9 @@ router.patch(
       return fail(res, 404, "Procurement request not found", "PROCUREMENT_REQUEST_NOT_FOUND");
     }
 
+    const workflowMeta = { module: "inventory", entityType: "ProcurementRequest", entityId: existing.id, operation: "update" };
+    await enforceWorkflowEditLimit(req, workflowMeta);
+
     const updated = await prisma.procurementRequest.update({
       where: { id: req.params.id },
       data: {
@@ -360,6 +364,7 @@ router.patch(
       targetId: updated.id,
       targetLabel: `${updated.material.sku} / ${updated.requestedQty}`,
     });
+    await recordWorkflowEditLock(req, workflowMeta);
 
     return ok(res, { item: mapProcurementRequest(updated) });
   }),
@@ -479,6 +484,9 @@ router.patch(
       return fail(res, 404, "Supplier PO not found", "SUPPLIER_PO_NOT_FOUND");
     }
 
+    const workflowMeta = { module: "inventory", entityType: "SupplierPurchaseOrder", entityId: existing.id, operation: "update" };
+    await enforceWorkflowEditLimit(req, workflowMeta);
+
     const expectedDate = parsed.data.expectedDate ? new Date(parsed.data.expectedDate) : undefined;
     if (parsed.data.expectedDate && Number.isNaN(expectedDate?.getTime())) {
       return fail(res, 400, "Invalid expected date", "INVALID_EXPECTED_DATE");
@@ -514,6 +522,7 @@ router.patch(
         targetId: po.id,
         targetLabel: po.poNumber,
       });
+      await recordWorkflowEditLock(req, workflowMeta, tx);
 
       return tx.supplierPurchaseOrder.findUnique({
         where: { id: existing.id },

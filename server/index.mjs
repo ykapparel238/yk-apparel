@@ -10,6 +10,7 @@ import { ApiError, fail } from "./http.mjs";
 import { logError, logInfo, requestLogger } from "./logger.mjs";
 import authRoutes from "./routes/auth.mjs";
 import assetsRoutes from "./routes/assets.mjs";
+import changeRequestRoutes from "./routes/change-requests.mjs";
 import dispatchRoutes from "./routes/dispatch.mjs";
 import dashboardRoutes from "./routes/dashboard.mjs";
 import inventoryRoutes from "./routes/inventory.mjs";
@@ -126,6 +127,7 @@ app.use("/api", (req, res, next) => {
 });
 
 app.use("/api/orders", ordersRoutes);
+app.use("/api/change-requests", changeRequestRoutes);
 app.use("/api/assets", assetsRoutes);
 app.use("/api/masters", mastersRoutes);
 app.use("/api/planning", planningRoutes);

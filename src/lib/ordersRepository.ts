@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { withWorkflowChangeRequest } from "@/lib/changeRequests";
 import type { OrderDetailPayload, OrderItem, OrderOption } from "@/lib/types";
 
 export type OrdersFilters = {
@@ -285,10 +286,14 @@ export async function createOrderFromRepository(payload: SaveOrderInput) {
 
 export async function updateOrderFromRepository(id: string, payload: SaveOrderInput) {
   try {
-    const response = await api<{ item: OrderItem }>(`/api/orders/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    });
+    const response = await withWorkflowChangeRequest(
+      () => api<{ item: OrderItem }>(`/api/orders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+      { module: "orders", entityType: "PurchaseOrder", entityId: id, operation: "update" },
+      payload,
+    );
     const cache = readCache();
     const detail = toOrderDetail(response.item, payload);
     writeCache({
@@ -333,7 +338,11 @@ export async function updateOrderFromRepository(id: string, payload: SaveOrderIn
 
 export async function deleteOrderFromRepository(id: string) {
   try {
-    await api<void>(`/api/orders/${id}`, { method: "DELETE" });
+    await withWorkflowChangeRequest(
+      () => api<void>(`/api/orders/${id}`, { method: "DELETE" }),
+      { module: "orders", entityType: "PurchaseOrder", entityId: id, operation: "delete" },
+      { id },
+    );
     const cache = readCache();
     const nextDetails = { ...cache.details };
     delete nextDetails[id];

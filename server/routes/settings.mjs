@@ -4,6 +4,8 @@ import { z } from "zod";
 import { prisma } from "../db.mjs";
 import { writeAuditLog } from "../audit.mjs";
 import { fail, ok, requireRoles, asyncHandler } from "../http.mjs";
+import { applyWorkflowChangeRequest } from "../workflow-change-apply.mjs";
+import { mapWorkflowChangeRequest } from "../workflow-control.mjs";
 
 const router = Router();
 
@@ -34,6 +36,10 @@ const createUserSchema = userSchema.extend({
 const desktopDeviceSchema = z.object({
   status: z.enum(["ACTIVE", "RESTRICTED", "LOCKED", "REVOKED"]),
   rebuildRequired: z.boolean().optional(),
+});
+
+const reviewSchema = z.object({
+  note: z.string().trim().max(1000).optional().default(""),
 });
 
 function mapRole(value) {
@@ -167,6 +173,101 @@ router.patch("/desktop-devices/:id", requireRoles("ADMIN"), asyncHandler(async (
       conflicts: updated.conflicts.length,
     },
   });
+}));
+
+router.get("/change-requests", requireRoles("ADMIN"), asyncHandler(async (_req, res) => {
+  const items = await prisma.workflowChangeRequest.findMany({
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    include: {
+      requester: true,
+      reviewer: true,
+    },
+    take: 100,
+  });
+
+  return ok(res, { items: items.map(mapWorkflowChangeRequest) });
+}));
+
+router.patch("/change-requests/:id/approve", requireRoles("ADMIN"), asyncHandler(async (req, res) => {
+  const parsed = reviewSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid review payload", "INVALID_REVIEW_PAYLOAD", parsed.error.flatten());
+  }
+
+  const item = await prisma.workflowChangeRequest.findUnique({
+    where: { id: req.params.id },
+    include: { requester: true, reviewer: true },
+  });
+  if (!item) {
+    return fail(res, 404, "Change request not found", "CHANGE_REQUEST_NOT_FOUND");
+  }
+  if (item.status !== "PENDING") {
+    return fail(res, 409, "Only pending change requests can be approved", "CHANGE_REQUEST_NOT_PENDING");
+  }
+
+  await applyWorkflowChangeRequest(req, item);
+  const updated = await prisma.workflowChangeRequest.update({
+    where: { id: item.id },
+    data: {
+      status: "APPROVED",
+      reviewerUserId: req.sessionUser?.id ?? null,
+      reviewNote: parsed.data.note || null,
+      reviewedAt: new Date(),
+    },
+    include: {
+      requester: true,
+      reviewer: true,
+    },
+  });
+
+  await writeAuditLog(req, {
+    module: "Settings",
+    action: "Approved change request",
+    targetType: "WorkflowChangeRequest",
+    targetId: updated.id,
+    targetLabel: `${updated.module} / ${updated.entityType}`,
+  });
+
+  return ok(res, { item: mapWorkflowChangeRequest(updated) });
+}));
+
+router.patch("/change-requests/:id/reject", requireRoles("ADMIN"), asyncHandler(async (req, res) => {
+  const parsed = reviewSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail(res, 400, "Invalid review payload", "INVALID_REVIEW_PAYLOAD", parsed.error.flatten());
+  }
+
+  const item = await prisma.workflowChangeRequest.findUnique({ where: { id: req.params.id } });
+  if (!item) {
+    return fail(res, 404, "Change request not found", "CHANGE_REQUEST_NOT_FOUND");
+  }
+  if (item.status !== "PENDING") {
+    return fail(res, 409, "Only pending change requests can be rejected", "CHANGE_REQUEST_NOT_PENDING");
+  }
+
+  const updated = await prisma.workflowChangeRequest.update({
+    where: { id: item.id },
+    data: {
+      status: "REJECTED",
+      reviewerUserId: req.sessionUser?.id ?? null,
+      reviewNote: parsed.data.note || null,
+      reviewedAt: new Date(),
+    },
+    include: {
+      requester: true,
+      reviewer: true,
+    },
+  });
+
+  await writeAuditLog(req, {
+    module: "Settings",
+    action: "Rejected change request",
+    targetType: "WorkflowChangeRequest",
+    targetId: updated.id,
+    targetLabel: `${updated.module} / ${updated.entityType}`,
+  });
+
+  return ok(res, { item: mapWorkflowChangeRequest(updated) });
 }));
 
 router.patch("/departments/:code", requireRoles("ADMIN"), asyncHandler(async (req, res) => {

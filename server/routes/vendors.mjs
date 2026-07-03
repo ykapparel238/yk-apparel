@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.mjs";
 import { writeAuditLog } from "../audit.mjs";
 import { fail, ok, requireRoles, asyncHandler } from "../http.mjs";
+import { enforceWorkflowEditLimit, recordWorkflowEditLock } from "../workflow-control.mjs";
 import { ACTIVE_ORDER_STATUSES } from "../constants.mjs";
 
 const router = Router();
@@ -246,6 +247,9 @@ router.patch("/:id/challans/:challanId", requireRoles("ADMIN", "VENDOR_MANAGER",
     return fail(res, 409, "Inward and rejected quantity cannot exceed outward quantity", "INVALID_CHALLAN_TOTALS");
   }
 
+  const workflowMeta = { module: "vendors", entityType: "VendorChallan", entityId: challan.id, operation: "update" };
+  await enforceWorkflowEditLimit(req, workflowMeta);
+
   const nextStatus =
     parsed.data.inwardQty === 0 && parsed.data.rejectedQty === 0
       ? "OPEN"
@@ -270,6 +274,7 @@ router.patch("/:id/challans/:challanId", requireRoles("ADMIN", "VENDOR_MANAGER",
     targetId: updated.id,
     targetLabel: updated.challanNumber,
   });
+  await recordWorkflowEditLock(req, workflowMeta);
 
   return ok(res, {
     item: {

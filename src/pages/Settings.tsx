@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { createSettingsUser, fetchSettings, updateDepartment, updateDesktopDevice, updateSettingsUser, updateShift } from "@/lib/services";
+import { approveWorkflowChangeRequest, fetchWorkflowChangeRequests, rejectWorkflowChangeRequest } from "@/lib/changeRequests";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Pencil, Plus, Shield } from "lucide-react";
+import { Check, Pencil, Plus, Shield, X } from "lucide-react";
 import { useState } from "react";
 import { type FieldValues, type Path, type UseFormReturn, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -94,6 +95,10 @@ export default function Settings() {
     queryKey: ["settings"],
     queryFn: fetchSettings,
   });
+  const changeRequestsQuery = useQuery({
+    queryKey: ["workflow-change-requests"],
+    queryFn: fetchWorkflowChangeRequests,
+  });
 
   const departmentForm = useForm<z.infer<typeof departmentSchema>>({
     resolver: zodResolver(departmentSchema),
@@ -118,6 +123,7 @@ export default function Settings() {
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["settings"] });
+    await queryClient.invalidateQueries({ queryKey: ["workflow-change-requests"] });
   };
 
   const departmentMutation = useMutation({
@@ -181,6 +187,22 @@ export default function Settings() {
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to update desktop device"),
   });
+  const approveChangeRequestMutation = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) => approveWorkflowChangeRequest(id, note),
+    onSuccess: async () => {
+      toast.success("Change request approved and applied");
+      await queryClient.invalidateQueries();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to approve change request"),
+  });
+  const rejectChangeRequestMutation = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) => rejectWorkflowChangeRequest(id, note),
+    onSuccess: async () => {
+      toast.success("Change request rejected");
+      await refresh();
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Unable to reject change request"),
+  });
 
   if (settingsQuery.isLoading) {
     return <div className="p-8 text-center text-sm text-muted-foreground">Loading settings...</div>;
@@ -191,6 +213,17 @@ export default function Settings() {
   }
 
   const { departments, shifts, users, auditLog } = settingsQuery.data;
+  const changeRequests = changeRequestsQuery.data?.items ?? [];
+
+  const approveRequest = (id: string) => {
+    const note = window.prompt("Optional approval note") ?? "";
+    approveChangeRequestMutation.mutate({ id, note });
+  };
+
+  const rejectRequest = (id: string) => {
+    const note = window.prompt("Reason for rejection") ?? "";
+    rejectChangeRequestMutation.mutate({ id, note });
+  };
 
   const openEditor = (next: EditorState) => {
     setEditor(next);
@@ -234,6 +267,7 @@ export default function Settings() {
           <TabsTrigger value="departments">Departments</TabsTrigger>
           <TabsTrigger value="shifts">Shifts</TabsTrigger>
           <TabsTrigger value="users">Users & Roles</TabsTrigger>
+          <TabsTrigger value="change-requests">Change Requests</TabsTrigger>
           <TabsTrigger value="desktop">Desktop Devices</TabsTrigger>
           <TabsTrigger value="audit">Audit Log</TabsTrigger>
         </TabsList>
@@ -337,6 +371,81 @@ export default function Settings() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="change-requests">
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="p-4 border-b border-border flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <Shield className="h-3.5 w-3.5" /> Admin approval queue for one-time locked updates
+              </span>
+              <span>{changeRequests.filter((item) => item.status === "PENDING").length} pending</span>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <tr className="text-left">
+                  <th className="px-4 py-3 font-semibold">Requested</th>
+                  <th className="px-4 py-3 font-semibold">Requester</th>
+                  <th className="px-4 py-3 font-semibold">Module</th>
+                  <th className="px-4 py-3 font-semibold">Target</th>
+                  <th className="px-4 py-3 font-semibold">Reason</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {changeRequests.map((item) => (
+                  <tr key={item.id} className="data-table-row">
+                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono-num">{item.createdAt}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{item.requester}</div>
+                      {item.requesterEmail ? <div className="text-[11px] text-muted-foreground">{item.requesterEmail}</div> : null}
+                    </td>
+                    <td className="px-4 py-3"><span className="px-1.5 py-0.5 bg-muted rounded text-[11px]">{item.module}</span></td>
+                    <td className="px-4 py-3 text-xs">
+                      <div>{item.entityType}</div>
+                      <div className="font-mono-num text-muted-foreground">{item.operation} · {item.entityId.slice(0, 12)}</div>
+                    </td>
+                    <td className="px-4 py-3 max-w-xs text-xs text-muted-foreground">{item.reason}</td>
+                    <td className="px-4 py-3"><StatusBadge status={item.status} /></td>
+                    <td className="px-4 py-3 text-right">
+                      {item.status === "PENDING" ? (
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={approveChangeRequestMutation.isPending || rejectChangeRequestMutation.isPending}
+                            onClick={() => approveRequest(item.id)}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={approveChangeRequestMutation.isPending || rejectChangeRequestMutation.isPending}
+                            onClick={() => rejectRequest(item.id)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{item.reviewer ?? "Reviewed"}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!changeRequests.length ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      No change requests yet.
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

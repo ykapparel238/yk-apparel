@@ -37,6 +37,10 @@ const prisma = {
   purchaseOrder: {
     findMany: vi.fn(),
   },
+  workflowEditLock: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+  },
   $transaction: vi.fn(),
 };
 
@@ -89,6 +93,8 @@ describe("inventory route", () => {
       if (typeof callback === "function") return callback(prisma);
       return Promise.all(callback);
     });
+    prisma.workflowEditLock.findUnique.mockResolvedValue(null);
+    prisma.workflowEditLock.upsert.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -240,7 +246,38 @@ describe("inventory route", () => {
 
     expect(res.statusCode).toBe(200);
     expect(prisma.procurementRequest.update).toHaveBeenCalled();
+    expect(prisma.workflowEditLock.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        module: "inventory",
+        entityType: "ProcurementRequest",
+        entityId: "pr-1",
+        operation: "update",
+      }),
+    }));
     expect(writeAuditLog).toHaveBeenCalled();
+  });
+
+  it("requires a change request after a procurement request was already edited once", async () => {
+    const route = (await import("../../server/routes/inventory.mjs")).default;
+    prisma.procurementRequest.findUnique.mockResolvedValue({
+      id: "pr-1",
+      material: { sku: "Y002", name: "Acrylic Yarn", supplier: { name: "Nahar" } },
+      supplier: { name: "Nahar" },
+      createdBy: { name: "Prakash" },
+    });
+    prisma.workflowEditLock.findUnique.mockResolvedValue({
+      id: "lock-1",
+      createdAt: new Date("2026-05-01T00:00:00.000Z"),
+    });
+
+    await expect(invokeRoute(route, "patch", "/procurement-requests/:id", {
+      params: { id: "pr-1" },
+      body: { status: "IN_PROGRESS", note: "Supplier confirmed", requestedQty: 2400 },
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "CHANGE_REQUEST_REQUIRED",
+    });
+    expect(prisma.procurementRequest.update).not.toHaveBeenCalled();
   });
 
   it("creates a supplier purchase order from a procurement request", async () => {

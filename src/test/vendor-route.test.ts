@@ -14,6 +14,10 @@ const prisma = {
     create: vi.fn(),
     update: vi.fn(),
   },
+  workflowEditLock: {
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
+  },
 };
 
 const writeAuditLog = vi.fn();
@@ -61,6 +65,8 @@ async function invokeRoute(router, method, path, reqOverrides = {}) {
 describe("vendor route", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    prisma.workflowEditLock.findUnique.mockResolvedValue(null);
+    prisma.workflowEditLock.upsert.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -114,6 +120,38 @@ describe("vendor route", () => {
     expect(prisma.vendorChallan.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "CLOSED" }),
     }));
+    expect(prisma.workflowEditLock.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        module: "vendors",
+        entityType: "VendorChallan",
+        entityId: "ch-1",
+        operation: "update",
+      }),
+    }));
     expect(writeAuditLog).toHaveBeenCalled();
+  });
+
+  it("requires a change request after a challan was already edited once", async () => {
+    const route = (await import("../../server/routes/vendors.mjs")).default;
+    prisma.vendorChallan.findFirst.mockResolvedValue({
+      id: "ch-1",
+      challanNumber: "CH-2401",
+      vendorId: "ven-1",
+      outwardQty: 100,
+      order: { poNumber: "PO-1" },
+    });
+    prisma.workflowEditLock.findUnique.mockResolvedValue({
+      id: "lock-1",
+      createdAt: new Date("2026-05-01T00:00:00.000Z"),
+    });
+
+    await expect(invokeRoute(route, "patch", "/:id/challans/:challanId", {
+      params: { id: "ven-1", challanId: "ch-1" },
+      body: { inwardQty: 95, rejectedQty: 5 },
+    })).rejects.toMatchObject({
+      status: 409,
+      code: "CHANGE_REQUEST_REQUIRED",
+    });
+    expect(prisma.vendorChallan.update).not.toHaveBeenCalled();
   });
 });

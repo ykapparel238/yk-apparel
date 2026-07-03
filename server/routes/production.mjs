@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.mjs";
 import { writeAuditLog } from "../audit.mjs";
 import { asyncHandler, fail, ok, requireRoles } from "../http.mjs";
+import { enforceWorkflowEditLimit, recordWorkflowEditLock } from "../workflow-control.mjs";
 
 const router = Router();
 
@@ -257,6 +258,9 @@ router.patch("/entries/:id", requireRoles("ADMIN", "FACTORY_MANAGER", "LINE_SUPE
     return fail(res, 409, "Rejected quantity cannot exceed actual quantity", "INVALID_REJECTED_QTY");
   }
 
+  const workflowMeta = { module: "production", entityType: "ProductionEntry", entityId: existing.id, operation: "update" };
+  await enforceWorkflowEditLimit(req, workflowMeta);
+
   const entry = await prisma.productionEntry.update({
     where: { id: req.params.id },
     data: {
@@ -287,6 +291,7 @@ router.patch("/entries/:id", requireRoles("ADMIN", "FACTORY_MANAGER", "LINE_SUPE
     targetId: entry.id,
     targetLabel: `${entry.line.name} / ${entry.metricDate.toISOString().slice(0, 10)}`,
   });
+  await recordWorkflowEditLock(req, workflowMeta);
 
   return ok(res, { item: mapEntry(entry) });
 }));

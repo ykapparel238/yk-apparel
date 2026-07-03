@@ -7,6 +7,22 @@ function toDate(value) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function startOfDay(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
+}
+
+function endOfDay(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCHours(23, 59, 59, 999);
+  return date;
+}
+
 function stringifyCell(value) {
   if (value === null || value === undefined) return "";
   return String(value).replace(/"/g, "\"\"");
@@ -245,29 +261,58 @@ export function buildDashboardPayload({ orders, stageMetrics, lineMetrics, defec
   };
 }
 
-export async function getDashboardPayload() {
+export async function getDashboardPayload(filters = {}) {
+  const dateFrom = startOfDay(filters.dateFrom);
+  const dateTo = endOfDay(filters.dateTo);
+  const orderWhere = {
+    ...(filters.brandId ? { brandId: filters.brandId } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+    ...((dateFrom || dateTo) ? { dueDate: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } } : {}),
+  };
+  const metricWhere = (dateFrom || dateTo)
+    ? `WHERE "metricDate" ${dateFrom ? `>= '${toDate(dateFrom)}'` : "IS NOT NULL"} ${dateTo ? `AND "metricDate" <= '${toDate(dateTo)}'` : ""}`
+    : "";
   const [orders, stageMetrics, lineMetrics, defects, alerts, vendors, shipments] = await Promise.all([
     prisma.purchaseOrder.findMany({
+      where: orderWhere,
       include: { brand: true, style: true },
       orderBy: { updatedAt: "desc" },
     }),
     prisma.$queryRawUnsafe(`
       SELECT "metricDate", "stage", "plannedQty", "actualQty", "wipQty", "rejectedQty", "pendingQty"
       FROM "daily_production_stage_fact"
+      ${metricWhere}
       ORDER BY "metricDate" ASC, "stage" ASC
     `),
     prisma.$queryRawUnsafe(`
       SELECT "metricDate", "lineId", "efficiencyPct", "outputQty", "isRunning"
       FROM "daily_line_performance_fact"
+      ${metricWhere}
       ORDER BY "metricDate" ASC, "lineId" ASC
     `),
     prisma.qaInspectionDefect.findMany({ include: { defectType: true } }),
     prisma.alert.findMany({ orderBy: { createdAt: "desc" }, take: 10 }),
     prisma.vendor.findMany({ include: { challans: true, weeklyMetrics: true } }),
-    prisma.dispatchShipment.findMany({ include: { order: true } }),
+    prisma.dispatchShipment.findMany({
+      where: (dateFrom || dateTo) ? { dispatchDate: { ...(dateFrom ? { gte: dateFrom } : {}), ...(dateTo ? { lte: dateTo } : {}) } } : {},
+      include: { order: true },
+    }),
   ]);
 
   return buildDashboardPayload({ orders, stageMetrics, lineMetrics, defects, alerts, vendors, shipments });
+}
+
+export function dashboardRows(payload) {
+  return [
+    { metric: "Total Orders", value: payload.kpis.totalOrders },
+    { metric: "Units Planned", value: payload.kpis.unitsPlanned },
+    { metric: "Units In Production", value: payload.kpis.unitsInProduction },
+    { metric: "Units Completed", value: payload.kpis.unitsCompleted },
+    { metric: "Line Efficiency", value: `${payload.kpis.lineEfficiency}%` },
+    { metric: "OTIF", value: `${payload.kpis.otif}%` },
+    { metric: "Rejection", value: `${payload.kpis.rejectionPct}%` },
+    { metric: "Delayed Orders", value: payload.kpis.delayedOrders },
+  ];
 }
 
 async function getProductionRows() {

@@ -28,9 +28,25 @@ import {
 } from "recharts";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useRole } from "@/context/RoleContext";
 import { useQuery } from "@tanstack/react-query";
-import { fetchDashboard } from "@/lib/services";
+import { fetchDashboard, fetchMastersOptions, type DashboardFilters } from "@/lib/services";
+import { useState } from "react";
 
 const chartTooltipStyle = {
   contentStyle: {
@@ -45,10 +61,17 @@ const chartTooltipStyle = {
 
 export default function Dashboard() {
   const { role } = useRole();
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<DashboardFilters>({});
+  const [draftFilters, setDraftFilters] = useState<DashboardFilters>({});
   const fmt = (n: number) => n.toLocaleString("en-IN");
   const dashboardQuery = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: fetchDashboard,
+    queryKey: ["dashboard", filters],
+    queryFn: () => fetchDashboard(filters),
+  });
+  const optionsQuery = useQuery({
+    queryKey: ["masters-options"],
+    queryFn: fetchMastersOptions,
   });
 
   if (dashboardQuery.isLoading) {
@@ -61,6 +84,7 @@ export default function Dashboard() {
 
   const { kpis, dailyTrend, qaDefects, monthlyCapacity, brandSummary, productionStages, alerts, vendors, orders } =
     dashboardQuery.data;
+  const query = buildDashboardQuery(filters);
 
   return (
     <div className="space-y-6">
@@ -73,15 +97,29 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-9">
+          <Button variant="outline" size="sm" className="h-9" onClick={() => {
+            const to = new Date();
+            const from = new Date();
+            from.setDate(to.getDate() - 30);
+            setFilters((current) => ({
+              ...current,
+              dateFrom: from.toISOString().slice(0, 10),
+              dateTo: to.toISOString().slice(0, 10),
+            }));
+          }}>
             <Calendar className="h-3.5 w-3.5 mr-1.5" />
             Last 30 days
           </Button>
-          <Button variant="outline" size="sm" className="h-9">
+          <Button variant="outline" size="sm" className="h-9" onClick={() => {
+            setDraftFilters(filters);
+            setFiltersOpen(true);
+          }}>
             <Filter className="h-3.5 w-3.5 mr-1.5" />
             Filters
           </Button>
-          <Button size="sm" className="h-9 bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button size="sm" className="h-9 bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => {
+            window.location.href = `/api/dashboard.pdf${query}`;
+          }}>
             Export Report
           </Button>
         </div>
@@ -315,6 +353,72 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+
+      <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Dashboard Filters</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium">From</label>
+                <Input type="date" value={draftFilters.dateFrom ?? ""} onChange={(event) => setDraftFilters((current) => ({ ...current, dateFrom: event.target.value || undefined }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium">To</label>
+                <Input type="date" value={draftFilters.dateTo ?? ""} onChange={(event) => setDraftFilters((current) => ({ ...current, dateTo: event.target.value || undefined }))} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Brand</label>
+              <Select value={draftFilters.brandId ?? "__all"} onValueChange={(value) => setDraftFilters((current) => ({ ...current, brandId: value === "__all" ? undefined : value }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all">All brands</SelectItem>
+                  {(optionsQuery.data?.brands ?? []).map((brand) => <SelectItem key={brand.id} value={brand.id}>{brand.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Order Status</label>
+              <Select value={draftFilters.status ?? "__all"} onValueChange={(value) => setDraftFilters((current) => ({ ...current, status: value === "__all" ? undefined : value }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all">All statuses</SelectItem>
+                  <SelectItem value="CREATED">Created</SelectItem>
+                  <SelectItem value="PLANNED">Planned</SelectItem>
+                  <SelectItem value="IN_PRODUCTION">In Production</SelectItem>
+                  <SelectItem value="QA">QA</SelectItem>
+                  <SelectItem value="READY_TO_DISPATCH">Ready To Dispatch</SelectItem>
+                  <SelectItem value="DISPATCHED">Dispatched</SelectItem>
+                  <SelectItem value="DELAYED">Delayed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setDraftFilters({});
+              setFilters({});
+              setFiltersOpen(false);
+            }}>Clear</Button>
+            <Button onClick={() => {
+              setFilters(draftFilters);
+              setFiltersOpen(false);
+            }}>Apply Filters</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function buildDashboardQuery(filters: DashboardFilters) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }

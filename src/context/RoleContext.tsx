@@ -9,11 +9,11 @@ import {
 } from "react";
 import {
   authenticate,
+  clearImpersonation,
   clearRoleOverride,
   logoutSession,
-  persistRoleOverride,
-  readRoleOverride,
   readSession,
+  startImpersonation,
   type LoginInput,
   type Role,
 } from "@/lib/auth";
@@ -57,7 +57,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
     readSession()
       .then((session) => {
-        const nextRole = readRoleOverride() ?? session.user.role;
+        const nextRole = session.user.effectiveRole ?? session.user.role;
         setRoleState(nextRole);
         setUser(session.user);
         void setDesktopCachedSession(session.user);
@@ -65,7 +65,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       .catch(async () => {
         const cachedUser = await getDesktopCachedSession();
         if (cachedUser) {
-          const nextRole = readRoleOverride() ?? cachedUser.role;
+          const nextRole = cachedUser.effectiveRole ?? cachedUser.role;
           setRoleState(nextRole);
           setUser(cachedUser);
           return;
@@ -78,8 +78,16 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setRole = useCallback((nextRole: Role) => {
-    setRoleState(nextRole);
-    persistRoleOverride(nextRole);
+    const mutateRole = nextRole === "Admin" ? clearImpersonation() : startImpersonation(nextRole);
+    mutateRole
+      .then((response) => {
+        setUser(response.user);
+        setRoleState(response.user.effectiveRole ?? response.user.role);
+        void setDesktopCachedSession(response.user);
+      })
+      .catch(() => {
+        setRoleState((current) => current);
+      });
   }, []);
 
   const login = useCallback(async (input: LoginInput) => {
@@ -89,7 +97,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     }
 
     const session = await authenticate(input);
-    const nextRole = readRoleOverride() ?? session.user.role;
+    const nextRole = session.user.effectiveRole ?? session.user.role;
     setRoleState(nextRole);
     setUser(session.user);
     await setDesktopCachedSession(session.user);

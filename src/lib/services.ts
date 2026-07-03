@@ -40,6 +40,8 @@ import type {
   MrpPayload,
   ReportRowsPayload,
   SettingsPayload,
+  NotificationsPayload,
+  SearchPayload,
   StyleColorwayItem,
   StyleMeasurementSpecItem,
   StyleSampleItem,
@@ -899,8 +901,25 @@ export async function createSettingsUser(payload: {
   });
 }
 
-export async function fetchDashboard() {
-  return api<DashboardPayload>("/api/dashboard");
+export type DashboardFilters = {
+  dateFrom?: string;
+  dateTo?: string;
+  brandId?: string;
+  status?: string;
+  module?: string;
+};
+
+function buildQuery(filters: Record<string, string | undefined>) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+export async function fetchDashboard(filters: DashboardFilters = {}) {
+  return api<DashboardPayload>(`/api/dashboard${buildQuery(filters)}`);
 }
 
 export async function fetchReports() {
@@ -913,4 +932,12 @@ export async function fetchReportRows(slug: string) {
 
 export async function fetchMrp() {
   return api<MrpPayload>("/api/mrp");
+}
+
+export async function fetchGlobalSearch(q: string) {
+  return api<SearchPayload>(`/api/search?q=${encodeURIComponent(q)}`);
+}
+
+export async function fetchNotifications() {
+  return api<NotificationsPayload>("/api/notifications");
 }

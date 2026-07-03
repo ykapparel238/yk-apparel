@@ -15,6 +15,10 @@ export type AuthUser = {
   name: string;
   email: string;
   role: Role;
+  actualRole?: Role;
+  effectiveRole?: Role;
+  impersonatedRole?: Role | null;
+  canImpersonate?: boolean;
 };
 
 export type OrderItem = {
@@ -588,6 +592,18 @@ export type DashboardPayload = {
   alerts: Array<{ id: string; severity: string; title: string; time: string; module: string }>;
   vendors: Array<{ id: string; name: string; process: string; pending: number; otd: number; quality: number }>;
   orders: Array<{ id: string; brand: string; qty: number; status: string }>;
+};
+
+export type SearchPayload = {
+  groups: Array<{
+    module: string;
+    items: Array<{ id: string; title: string; subtitle: string; href: string }>;
+  }>;
+};
+
+export type NotificationsPayload = {
+  count: number;
+  items: Array<{ id: string; severity: string; title: string; module: string; time: string; href: string }>;
 };
 
 export type ReportsPayload = {

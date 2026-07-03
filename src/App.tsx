@@ -8,6 +8,7 @@ import { DesktopSyncProvider } from "@/context/DesktopSyncContext";
 import { RoleProvider } from "@/context/RoleContext";
 import { useRole } from "@/context/RoleContext";
 import AppLayout from "@/components/layout/AppLayout";
+import { WorkflowChangeRequestDialog } from "@/components/WorkflowChangeRequestDialog";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Orders = lazy(() => import("./pages/Orders"));
@@ -64,6 +65,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <WorkflowChangeRequestDialog />
       <DesktopSyncProvider>
         <RoleProvider>
           <BrowserRouter>

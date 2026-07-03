@@ -65,6 +65,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
@@ -260,6 +261,8 @@ function getDeleteLabel(state: DeleteState) {
 }
 
 export default function Masters() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<EditorState>(null);
   const [deleteState, setDeleteState] = useState<DeleteState>(null);
@@ -752,6 +755,14 @@ export default function Masters() {
       );
     }
   };
+
+  useEffect(() => {
+    const state = location.state as { openMasterAction?: string; kind?: "brand" | "supplier" | "vendor" | "style" | "material" | "bom" | "line" } | null;
+    if (state?.openMasterAction === "create" && state.kind) {
+      openEditor({ kind: state.kind, mode: "create" } as EditorState);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   const summary = summaryQuery.data;
   const isLoading = summaryQuery.isLoading || optionsQuery.isLoading;

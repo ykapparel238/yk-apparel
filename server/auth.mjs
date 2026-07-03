@@ -52,18 +52,21 @@ export async function destroySession(rawToken) {
   });
 }
 
-export async function findSessionUser(rawToken) {
+export async function findSessionByToken(rawToken) {
   if (!rawToken) return null;
-
-  const session = await prisma.session.findFirst({
+  return prisma.session.findFirst({
     where: {
       tokenHash: sha256(rawToken),
       expiresAt: { gt: new Date() },
     },
-    include: {
-      user: true,
-    },
+    include: { user: true },
   });
+}
+
+export async function findSessionUser(rawToken) {
+  if (!rawToken) return null;
+
+  const session = await findSessionByToken(rawToken);
 
   if (!session?.user) return null;
   if (!session.user.lastActiveAt || Date.now() - new Date(session.user.lastActiveAt).getTime() > LAST_ACTIVE_INTERVAL_MS) {
@@ -73,16 +76,25 @@ export async function findSessionUser(rawToken) {
     });
     session.user.lastActiveAt = new Date();
   }
+  session.user.actualRole = session.user.role;
+  session.user.effectiveRole = session.impersonatedRole ?? session.user.role;
+  session.user.impersonatedRole = session.impersonatedRole;
   return session.user;
 }
 
 export function serializeUser(user) {
+  const actualRole = user.actualRole ?? user.role;
+  const effectiveRole = user.effectiveRole ?? user.role;
   return {
     id: user.id,
     employeeCode: user.employeeCode,
     name: user.name,
     email: user.email,
-    role: formatEnumLabel(user.role),
+    role: formatEnumLabel(effectiveRole),
+    actualRole: formatEnumLabel(actualRole),
+    effectiveRole: formatEnumLabel(effectiveRole),
+    impersonatedRole: user.impersonatedRole ? formatEnumLabel(user.impersonatedRole) : null,
+    canImpersonate: actualRole === "ADMIN",
   };
 }
 

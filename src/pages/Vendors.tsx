@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { fetchVendors } from "@/lib/services";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { Link } from "react-router-dom";
-import { toast } from "sonner";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function Vendors() {
+  const navigate = useNavigate();
   const fmt = (n: number) => n.toLocaleString("en-IN");
   const vendorsQuery = useQuery({
     queryKey: ["vendors"],
@@ -33,7 +33,7 @@ export default function Vendors() {
           <Button
             size="sm"
             className="h-9"
-            onClick={() => toast("Use Master Data to add vendors")}
+            onClick={() => navigate("/masters", { state: { openMasterAction: "create", kind: "vendor" } })}
           >
             <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Vendor
           </Button>

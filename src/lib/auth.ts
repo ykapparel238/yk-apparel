@@ -62,6 +62,19 @@ export async function readSession() {
   return api<{ user: AuthUser }>("/api/auth/session");
 }
 
+export async function startImpersonation(role: Role) {
+  return api<{ user: AuthUser }>("/api/auth/impersonation", {
+    method: "POST",
+    body: JSON.stringify({ role: role.replaceAll(" ", "_").toUpperCase() }),
+  });
+}
+
+export async function clearImpersonation() {
+  return api<{ user: AuthUser }>("/api/auth/impersonation", {
+    method: "DELETE",
+  });
+}
+
 export async function logoutSession() {
   return api<void>("/api/auth/logout", {
     method: "POST",

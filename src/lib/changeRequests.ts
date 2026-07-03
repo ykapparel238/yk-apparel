@@ -20,6 +20,17 @@ export type WorkflowChangeRequestItem = ChangeRequestMeta & {
   createdAt: string;
 };
 
+type ReasonResolver = (reason: string | null) => void;
+
+export const WORKFLOW_CHANGE_REASON_EVENT = "knitcraft.workflow-change-reason";
+
+export function requestWorkflowChangeReason() {
+  if (typeof window === "undefined") return Promise.resolve<string | null>(null);
+  return new Promise<string | null>((resolve: ReasonResolver) => {
+    window.dispatchEvent(new CustomEvent(WORKFLOW_CHANGE_REASON_EVENT, { detail: { resolve } }));
+  });
+}
+
 export async function submitWorkflowChangeRequest(payload: ChangeRequestMeta & {
   proposedPayload: unknown;
   reason: string;
@@ -42,9 +53,7 @@ export async function withWorkflowChangeRequest<T>(
       throw error;
     }
 
-    const reason = typeof window !== "undefined"
-      ? window.prompt("This record was already updated once. Enter the reason to request admin approval for this change:")
-      : null;
+    const reason = await requestWorkflowChangeReason();
 
     if (!reason?.trim()) {
       throw error;

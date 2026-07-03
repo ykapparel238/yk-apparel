@@ -21,6 +21,8 @@ import planningRoutes from "./routes/planning.mjs";
 import productionRoutes from "./routes/production.mjs";
 import qaRoutes from "./routes/qa.mjs";
 import reportsRoutes from "./routes/reports.mjs";
+import notificationRoutes from "./routes/notifications.mjs";
+import searchRoutes from "./routes/search.mjs";
 import settingsRoutes from "./routes/settings.mjs";
 import syncRoutes from "./routes/sync.mjs";
 import vendorsRoutes from "./routes/vendors.mjs";
@@ -97,7 +99,11 @@ app.use("/api", async (req, res, next) => {
     return fail(res, 401, "Authentication required", "AUTH_REQUIRED");
   }
 
-  req.sessionUser = user;
+  req.sessionUser = {
+    ...user,
+    role: user.effectiveRole ?? user.role,
+    actualRole: user.actualRole ?? user.role,
+  };
   req.user = serializeUser(user);
   return next();
 });
@@ -128,6 +134,8 @@ app.use("/api", (req, res, next) => {
 
 app.use("/api/orders", ordersRoutes);
 app.use("/api/change-requests", changeRequestRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/assets", assetsRoutes);
 app.use("/api/masters", mastersRoutes);
 app.use("/api/planning", planningRoutes);

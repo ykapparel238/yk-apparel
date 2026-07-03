@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const authenticateUser = vi.fn();
 const createSession = vi.fn();
 const destroySession = vi.fn();
+const findSessionByToken = vi.fn();
 const findSessionUser = vi.fn();
 const getSessionCookieName = vi.fn(() => "kc_session");
 const getSessionCookieOptions = vi.fn(() => ({ httpOnly: true }));
@@ -12,11 +13,22 @@ vi.mock("../../server/auth.mjs", () => ({
   authenticateUser,
   createSession,
   destroySession,
+  findSessionByToken,
   findSessionUser,
   getSessionCookieName,
   getSessionCookieOptions,
   serializeUser,
 }));
+
+const prisma = {
+  session: {
+    update: vi.fn(),
+  },
+};
+const writeAuditLog = vi.fn();
+
+vi.mock("../../server/db.mjs", () => ({ prisma }));
+vi.mock("../../server/audit.mjs", () => ({ writeAuditLog }));
 
 function createRes() {
   return {
@@ -124,5 +136,41 @@ describe("auth route", () => {
     expect(destroySession).toHaveBeenCalledWith("token-1");
     expect(res.clearCookie).toHaveBeenCalled();
     expect(res.statusCode).toBe(204);
+  });
+
+  it("lets admins start role impersonation", async () => {
+    const route = (await import("../../server/routes/auth.mjs")).default;
+    findSessionUser
+      .mockResolvedValueOnce({ id: "u1", name: "Rohit", email: "rohit@knitcraft.in", role: "ADMIN", actualRole: "ADMIN" })
+      .mockResolvedValueOnce({ id: "u1", name: "Rohit", email: "rohit@knitcraft.in", role: "ADMIN", actualRole: "ADMIN", effectiveRole: "STORE_MANAGER", impersonatedRole: "STORE_MANAGER" });
+    findSessionByToken.mockResolvedValue({ id: "sess-1" });
+    prisma.session.update.mockResolvedValue({});
+    serializeUser.mockImplementation((user) => ({ id: user.id, role: user.effectiveRole === "STORE_MANAGER" ? "Store Manager" : "Admin", canImpersonate: true }));
+
+    const { res } = await invokeRoute(route, "post", "/impersonation", {
+      cookies: { kc_session: "token-1" },
+      body: { role: "STORE_MANAGER" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "sess-1" },
+      data: { impersonatedRole: "STORE_MANAGER" },
+    });
+    expect(writeAuditLog).toHaveBeenCalled();
+    expect(res.body.user.role).toBe("Store Manager");
+  });
+
+  it("blocks non-admin role impersonation", async () => {
+    const route = (await import("../../server/routes/auth.mjs")).default;
+    findSessionUser.mockResolvedValue({ id: "u2", name: "Meena", email: "meena@knitcraft.in", role: "PRODUCTION_PLANNER", actualRole: "PRODUCTION_PLANNER" });
+
+    const { res } = await invokeRoute(route, "post", "/impersonation", {
+      cookies: { kc_session: "token-2" },
+      body: { role: "STORE_MANAGER" },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(prisma.session.update).not.toHaveBeenCalled();
   });
 });

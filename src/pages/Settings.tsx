@@ -69,6 +69,8 @@ type EditorState =
   | { kind: "desktopDevice"; item: { id: string; clientVersion: string; workspaceId: string; status: string; rebuildRequired: boolean; lastSeenAt: string; conflicts: number } }
   | null;
 
+type ReviewState = { id: string; action: "approve" | "reject"; note: string } | null;
+
 const roleOptions = [
   "ADMIN",
   "FACTORY_MANAGER",
@@ -90,6 +92,7 @@ function getEditorId(editor: EditorState, kind: NonNullable<EditorState>["kind"]
 
 export default function Settings() {
   const [editor, setEditor] = useState<EditorState>(null);
+  const [review, setReview] = useState<ReviewState>(null);
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -215,14 +218,14 @@ export default function Settings() {
   const { departments, shifts, users, auditLog } = settingsQuery.data;
   const changeRequests = changeRequestsQuery.data?.items ?? [];
 
-  const approveRequest = (id: string) => {
-    const note = window.prompt("Optional approval note") ?? "";
-    approveChangeRequestMutation.mutate({ id, note });
-  };
-
-  const rejectRequest = (id: string) => {
-    const note = window.prompt("Reason for rejection") ?? "";
-    rejectChangeRequestMutation.mutate({ id, note });
+  const submitReview = () => {
+    if (!review) return;
+    if (review.action === "approve") {
+      approveChangeRequestMutation.mutate({ id: review.id, note: review.note });
+    } else {
+      rejectChangeRequestMutation.mutate({ id: review.id, note: review.note });
+    }
+    setReview(null);
   };
 
   const openEditor = (next: EditorState) => {
@@ -419,7 +422,7 @@ export default function Settings() {
                             size="icon"
                             className="h-8 w-8"
                             disabled={approveChangeRequestMutation.isPending || rejectChangeRequestMutation.isPending}
-                            onClick={() => approveRequest(item.id)}
+                            onClick={() => setReview({ id: item.id, action: "approve", note: "" })}
                           >
                             <Check className="h-4 w-4" />
                           </Button>
@@ -428,7 +431,7 @@ export default function Settings() {
                             size="icon"
                             className="h-8 w-8"
                             disabled={approveChangeRequestMutation.isPending || rejectChangeRequestMutation.isPending}
-                            onClick={() => rejectRequest(item.id)}
+                            onClick={() => setReview({ id: item.id, action: "reject", note: "" })}
                           >
                             <X className="h-4 w-4" />
                           </Button>
@@ -716,6 +719,44 @@ export default function Settings() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={Boolean(review)} onOpenChange={(open) => !open && setReview(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{review?.action === "approve" ? "Approve Change Request" : "Reject Change Request"}</DialogTitle>
+            <DialogDescription>
+              {review?.action === "approve"
+                ? "Approval applies the proposed change immediately after backend validation."
+                : "Rejection leaves the original record unchanged."}
+            </DialogDescription>
+          </DialogHeader>
+          <SimpleTextarea
+            value={review?.note ?? ""}
+            onChange={(note) => setReview((current) => current ? { ...current, note } : current)}
+            label="Review note"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReview(null)}>Cancel</Button>
+            <Button onClick={submitReview} disabled={approveChangeRequestMutation.isPending || rejectChangeRequestMutation.isPending}>
+              {review?.action === "approve" ? "Approve" : "Reject"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SimpleTextarea({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium">{label}</label>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        placeholder="Optional note..."
+      />
     </div>
   );
 }

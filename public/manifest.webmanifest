@@ -1,7 +1,7 @@
 {
-  "name": "KnitCraft MES",
-  "short_name": "KnitCraft",
-  "description": "Mobile daily production tasks for textile factory teams.",
+  "name": "YK Apparels",
+  "short_name": "YK Apparels",
+  "description": "Mobile daily production tasks for YK Apparels teams.",
   "start_url": "/mobile",
   "scope": "/",
   "display": "standalone",

@@ -54,7 +54,7 @@ export function AppHeader() {
         .join("")
         .slice(0, 2)
         .toUpperCase()
-    : "KC";
+    : "YK";
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card/80 backdrop-blur px-4">

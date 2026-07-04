@@ -1,16 +1,16 @@
 services:
   postgres:
     image: postgres:16
-    container_name: knitcraft-postgres
+    container_name: yk-apparels-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: knitcraft_mes
+      POSTGRES_DB: yk_apparels
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
-      - knitcraft_postgres_data:/var/lib/postgresql/data
+      - yk_apparels_postgres_data:/var/lib/postgresql/data
 
 volumes:
-  knitcraft_postgres_data:
+  yk_apparels_postgres_data:

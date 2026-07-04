@@ -5,14 +5,14 @@ import { DatabaseSync } from "node:sqlite";
 
 const APP_SUPPORT_DIR = path.join(os.homedir(), "Library", "Application Support");
 const DB_CANDIDATES = [
-  path.join(APP_SUPPORT_DIR, "Electron", "offline-knitcraft.db"),
-  path.join(APP_SUPPORT_DIR, "KnitCraft MES", "offline-knitcraft.db"),
-  path.join(APP_SUPPORT_DIR, "vite_react_shadcn_ts", "offline-knitcraft.db"),
+  path.join(APP_SUPPORT_DIR, "YK Apparels", "offline-yk-apparels.db"),
+  path.join(APP_SUPPORT_DIR, "Electron", "offline-yk-apparels.db"),
+  path.join(APP_SUPPORT_DIR, "vite_react_shadcn_ts", "offline-yk-apparels.db"),
 ];
 
 export function getDesktopDbPath() {
-  if (process.env.KNITCRAFT_DESKTOP_DB_PATH) {
-    return process.env.KNITCRAFT_DESKTOP_DB_PATH;
+  if (process.env.YK_APPARELS_DESKTOP_DB_PATH) {
+    return process.env.YK_APPARELS_DESKTOP_DB_PATH;
   }
 
   const existing = DB_CANDIDATES.find((candidate) => fs.existsSync(candidate));

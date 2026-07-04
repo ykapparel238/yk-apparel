@@ -1,4 +1,4 @@
-const CACHE_NAME = "knitcraft-mobile-shell-v1";
+const CACHE_NAME = "yk-apparels-mobile-shell-v1";
 const APP_SHELL = ["/", "/mobile", "/manifest.webmanifest", "/pwa-icon.svg"];
 
 self.addEventListener("install", (event) => {

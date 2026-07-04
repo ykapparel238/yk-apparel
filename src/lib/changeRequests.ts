@@ -22,7 +22,7 @@ export type WorkflowChangeRequestItem = ChangeRequestMeta & {
 
 type ReasonResolver = (reason: string | null) => void;
 
-export const WORKFLOW_CHANGE_REASON_EVENT = "knitcraft.workflow-change-reason";
+export const WORKFLOW_CHANGE_REASON_EVENT = "ykapparels.workflow-change-reason";
 
 export function requestWorkflowChangeReason() {
   if (typeof window === "undefined") return Promise.resolve<string | null>(null);

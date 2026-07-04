@@ -1,4 +1,4 @@
-# KnitCraft MES Agent Guide
+# YK Apparels Agent Guide
 
 ## Purpose
 

@@ -38,7 +38,7 @@ type OrdersCache = {
   updatedAt: string | null;
 };
 
-const CACHE_KEY = "knitcraft.offline.orders.cache.v1";
+const CACHE_KEY = "ykapparels.offline.orders.cache.v1";
 
 const emptyCache = (): OrdersCache => ({
   items: [],

@@ -66,12 +66,12 @@ async function main() {
   ]);
 
   const users = await Promise.all([
-    prisma.user.create({ data: { employeeCode: "U001", name: "Rohit Mehra", email: "rohit@knitcraft.in", passwordHash: bcrypt.hashSync("demo1234", 10), role: "ADMIN", departmentId: knitting.id, shiftId: shiftA.id } }),
-    prisma.user.create({ data: { employeeCode: "U002", name: "Suresh Kumar", email: "suresh@knitcraft.in", passwordHash: bcrypt.hashSync("manager123", 10), role: "FACTORY_MANAGER", departmentId: knitting.id, shiftId: shiftA.id } }),
-    prisma.user.create({ data: { employeeCode: "U003", name: "Meena Sharma", email: "meena@knitcraft.in", passwordHash: bcrypt.hashSync("planner123", 10), role: "PRODUCTION_PLANNER", departmentId: linking.id, shiftId: shiftA.id } }),
-    prisma.user.create({ data: { employeeCode: "U004", name: "Devansh Rao", email: "devansh@knitcraft.in", passwordHash: bcrypt.hashSync("quality123", 10), role: "QA_MANAGER", departmentId: qaDept.id, shiftId: shiftA.id } }),
-    prisma.user.create({ data: { employeeCode: "U005", name: "Prakash Nair", email: "prakash@knitcraft.in", passwordHash: bcrypt.hashSync("stores123", 10), role: "STORE_MANAGER", departmentId: stores.id, shiftId: shiftA.id } }),
-    prisma.user.create({ data: { employeeCode: "U006", name: "Vinod Singh", email: "vinod@knitcraft.in", passwordHash: bcrypt.hashSync("dispatch123", 10), role: "DISPATCH_MANAGER", departmentId: dispatch.id, shiftId: shiftA.id } }),
+    prisma.user.create({ data: { employeeCode: "U001", name: "Rohit Mehra", email: "rohit@ykapparels.in", passwordHash: bcrypt.hashSync("demo1234", 10), role: "ADMIN", departmentId: knitting.id, shiftId: shiftA.id } }),
+    prisma.user.create({ data: { employeeCode: "U002", name: "Suresh Kumar", email: "suresh@ykapparels.in", passwordHash: bcrypt.hashSync("manager123", 10), role: "FACTORY_MANAGER", departmentId: knitting.id, shiftId: shiftA.id } }),
+    prisma.user.create({ data: { employeeCode: "U003", name: "Meena Sharma", email: "meena@ykapparels.in", passwordHash: bcrypt.hashSync("planner123", 10), role: "PRODUCTION_PLANNER", departmentId: linking.id, shiftId: shiftA.id } }),
+    prisma.user.create({ data: { employeeCode: "U004", name: "Devansh Rao", email: "devansh@ykapparels.in", passwordHash: bcrypt.hashSync("quality123", 10), role: "QA_MANAGER", departmentId: qaDept.id, shiftId: shiftA.id } }),
+    prisma.user.create({ data: { employeeCode: "U005", name: "Prakash Nair", email: "prakash@ykapparels.in", passwordHash: bcrypt.hashSync("stores123", 10), role: "STORE_MANAGER", departmentId: stores.id, shiftId: shiftA.id } }),
+    prisma.user.create({ data: { employeeCode: "U006", name: "Vinod Singh", email: "vinod@ykapparels.in", passwordHash: bcrypt.hashSync("dispatch123", 10), role: "DISPATCH_MANAGER", departmentId: dispatch.id, shiftId: shiftA.id } }),
   ]);
 
   const brands = await Promise.all([

@@ -6,7 +6,7 @@ describe("verify release env", () => {
     expect(() =>
       validateReleaseEnv({
         APP_URL: "http://localhost:8080",
-        SMOKE_EMAIL: "rohit@knitcraft.in",
+        SMOKE_EMAIL: "rohit@ykapparels.in",
         SMOKE_PASSWORD: "demo1234",
       }),
     ).not.toThrow();

@@ -5,7 +5,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell, session } = require("electro
 const { DatabaseSync } = require("node:sqlite");
 
 const DESKTOP_CLIENT_VERSION = "1.0.0";
-const WORKSPACE_ID = "knitcraft-mes";
+const WORKSPACE_ID = "yk-apparels";
 const DEFAULT_API_BASE_URL = process.env.DESKTOP_API_BASE_URL || "http://127.0.0.1:4000";
 const SNAPSHOT_KEYS = {
   ordersList: "orders.list",
@@ -39,7 +39,7 @@ function getUserDataPath() {
 }
 
 function getDatabasePath() {
-  return path.join(getUserDataPath(), "offline-knitcraft.db");
+  return path.join(getUserDataPath(), "offline-yk-apparels.db");
 }
 
 function openDatabase() {

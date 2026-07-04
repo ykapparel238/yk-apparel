@@ -21,7 +21,7 @@ export const loginSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
-const ROLE_OVERRIDE_KEY = "knitcraft.role.override";
+const ROLE_OVERRIDE_KEY = "ykapparels.role.override";
 
 const safeStorage = {
   getItem(key: string) {

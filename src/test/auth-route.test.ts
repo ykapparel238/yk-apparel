@@ -90,11 +90,11 @@ describe("auth route", () => {
 
   it("logs in valid users and sets session cookie", async () => {
     const route = (await import("../../server/routes/auth.mjs")).default;
-    authenticateUser.mockResolvedValue({ id: "u1", name: "Rohit", email: "rohit@knitcraft.in" });
+    authenticateUser.mockResolvedValue({ id: "u1", name: "Rohit", email: "rohit@ykapparels.in" });
     createSession.mockResolvedValue({ rawToken: "token-1", expiresAt: new Date("2026-05-01T00:00:00.000Z") });
 
     const { res } = await invokeRoute(route, "post", "/login", {
-      body: { email: "rohit@knitcraft.in", password: "demo1234" },
+      body: { email: "rohit@ykapparels.in", password: "demo1234" },
     });
 
     expect(res.statusCode).toBe(200);
@@ -107,7 +107,7 @@ describe("auth route", () => {
     authenticateUser.mockResolvedValue(null);
 
     const { res } = await invokeRoute(route, "post", "/login", {
-      body: { email: "rohit@knitcraft.in", password: "wrong123" },
+      body: { email: "rohit@ykapparels.in", password: "wrong123" },
     });
 
     expect(res.statusCode).toBe(401);
@@ -116,7 +116,7 @@ describe("auth route", () => {
 
   it("returns active session user", async () => {
     const route = (await import("../../server/routes/auth.mjs")).default;
-    findSessionUser.mockResolvedValue({ id: "u1", name: "Rohit", email: "rohit@knitcraft.in" });
+    findSessionUser.mockResolvedValue({ id: "u1", name: "Rohit", email: "rohit@ykapparels.in" });
 
     const { res } = await invokeRoute(route, "get", "/session", {
       cookies: { kc_session: "token-1" },
@@ -141,8 +141,8 @@ describe("auth route", () => {
   it("lets admins start role impersonation", async () => {
     const route = (await import("../../server/routes/auth.mjs")).default;
     findSessionUser
-      .mockResolvedValueOnce({ id: "u1", name: "Rohit", email: "rohit@knitcraft.in", role: "ADMIN", actualRole: "ADMIN" })
-      .mockResolvedValueOnce({ id: "u1", name: "Rohit", email: "rohit@knitcraft.in", role: "ADMIN", actualRole: "ADMIN", effectiveRole: "STORE_MANAGER", impersonatedRole: "STORE_MANAGER" });
+      .mockResolvedValueOnce({ id: "u1", name: "Rohit", email: "rohit@ykapparels.in", role: "ADMIN", actualRole: "ADMIN" })
+      .mockResolvedValueOnce({ id: "u1", name: "Rohit", email: "rohit@ykapparels.in", role: "ADMIN", actualRole: "ADMIN", effectiveRole: "STORE_MANAGER", impersonatedRole: "STORE_MANAGER" });
     findSessionByToken.mockResolvedValue({ id: "sess-1" });
     prisma.session.update.mockResolvedValue({});
     serializeUser.mockImplementation((user) => ({ id: user.id, role: user.effectiveRole === "STORE_MANAGER" ? "Store Manager" : "Admin", canImpersonate: true }));
@@ -163,7 +163,7 @@ describe("auth route", () => {
 
   it("blocks non-admin role impersonation", async () => {
     const route = (await import("../../server/routes/auth.mjs")).default;
-    findSessionUser.mockResolvedValue({ id: "u2", name: "Meena", email: "meena@knitcraft.in", role: "PRODUCTION_PLANNER", actualRole: "PRODUCTION_PLANNER" });
+    findSessionUser.mockResolvedValue({ id: "u2", name: "Meena", email: "meena@ykapparels.in", role: "PRODUCTION_PLANNER", actualRole: "PRODUCTION_PLANNER" });
 
     const { res } = await invokeRoute(route, "post", "/impersonation", {
       cookies: { kc_session: "token-2" },

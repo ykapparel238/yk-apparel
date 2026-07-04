@@ -35,7 +35,7 @@ async function loadStorage(env: Record<string, string>) {
   vi.resetModules();
   process.env = {
     ...originalEnv,
-    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/knitcraft_mes?schema=public",
+    DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/yk_apparels?schema=public",
     ...env,
   };
   return import("../../server/storage.mjs");
@@ -83,7 +83,7 @@ describe("asset storage", () => {
   it("uploads to S3-compatible storage", async () => {
     const storage = await loadStorage({
       UPLOAD_STORAGE_DRIVER: "s3",
-      S3_BUCKET: "knitcraft-assets",
+      S3_BUCKET: "yk-apparels-assets",
       S3_REGION: "us-east-1",
       S3_ENDPOINT: "https://objects.example.com",
       S3_ACCESS_KEY_ID: "key",
@@ -98,10 +98,10 @@ describe("asset storage", () => {
       bytes: Buffer.from("pdf"),
     });
 
-    expect(result.publicUrl).toContain("https://objects.example.com/knitcraft-assets/style/style-1/tech-pack-");
+    expect(result.publicUrl).toContain("https://objects.example.com/yk-apparels-assets/style/style-1/tech-pack-");
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
       input: expect.objectContaining({
-        Bucket: "knitcraft-assets",
+        Bucket: "yk-apparels-assets",
         Key: expect.stringMatching(/^style\/style-1\/tech-pack-/),
         ContentType: "application/pdf",
       }),
@@ -111,7 +111,7 @@ describe("asset storage", () => {
   it("deletes S3 objects", async () => {
     const storage = await loadStorage({
       UPLOAD_STORAGE_DRIVER: "s3",
-      S3_BUCKET: "knitcraft-assets",
+      S3_BUCKET: "yk-apparels-assets",
       S3_REGION: "us-east-1",
       S3_ACCESS_KEY_ID: "key",
       S3_SECRET_ACCESS_KEY: "secret",
@@ -121,7 +121,7 @@ describe("asset storage", () => {
 
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
       input: expect.objectContaining({
-        Bucket: "knitcraft-assets",
+        Bucket: "yk-apparels-assets",
         Key: "style/style-1/spec.pdf",
       }),
     }));

@@ -219,14 +219,14 @@ export const shifts = [
 ];
 
 export const users = [
-  { id: "U001", name: "Rohit Mehra", email: "rohit@knitcraft.in", role: "Admin", status: "Active", last: "Just now" },
-  { id: "U002", name: "Suresh Kumar", email: "suresh@knitcraft.in", role: "Factory Manager", status: "Active", last: "12 min ago" },
-  { id: "U003", name: "Meena Sharma", email: "meena@knitcraft.in", role: "Production Planner", status: "Active", last: "1 hr ago" },
-  { id: "U004", name: "Devansh Rao", email: "devansh@knitcraft.in", role: "QA Manager", status: "Active", last: "3 hr ago" },
-  { id: "U005", name: "Prakash Nair", email: "prakash@knitcraft.in", role: "Store Manager", status: "Active", last: "Yesterday" },
-  { id: "U006", name: "Vinod Singh", email: "vinod@knitcraft.in", role: "Dispatch Manager", status: "Active", last: "2 days ago" },
-  { id: "U007", name: "Anjali Verma", email: "anjali@knitcraft.in", role: "Merchandiser", status: "Active", last: "5 hr ago" },
-  { id: "U008", name: "Karan Das", email: "karan@knitcraft.in", role: "Vendor Manager", status: "Inactive", last: "2 weeks ago" },
+  { id: "U001", name: "Rohit Mehra", email: "rohit@ykapparels.in", role: "Admin", status: "Active", last: "Just now" },
+  { id: "U002", name: "Suresh Kumar", email: "suresh@ykapparels.in", role: "Factory Manager", status: "Active", last: "12 min ago" },
+  { id: "U003", name: "Meena Sharma", email: "meena@ykapparels.in", role: "Production Planner", status: "Active", last: "1 hr ago" },
+  { id: "U004", name: "Devansh Rao", email: "devansh@ykapparels.in", role: "QA Manager", status: "Active", last: "3 hr ago" },
+  { id: "U005", name: "Prakash Nair", email: "prakash@ykapparels.in", role: "Store Manager", status: "Active", last: "Yesterday" },
+  { id: "U006", name: "Vinod Singh", email: "vinod@ykapparels.in", role: "Dispatch Manager", status: "Active", last: "2 days ago" },
+  { id: "U007", name: "Anjali Verma", email: "anjali@ykapparels.in", role: "Merchandiser", status: "Active", last: "5 hr ago" },
+  { id: "U008", name: "Karan Das", email: "karan@ykapparels.in", role: "Vendor Manager", status: "Inactive", last: "2 weeks ago" },
 ];
 
 export const auditLog = [

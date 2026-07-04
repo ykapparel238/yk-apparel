@@ -30,7 +30,7 @@ export default function Login() {
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "rohit@knitcraft.in",
+      email: "rohit@ykapparels.in",
       password: "demo1234",
     },
   });
@@ -57,17 +57,17 @@ export default function Login() {
       <div className="hidden lg:flex flex-col justify-between p-12 bg-primary text-primary-foreground relative overflow-hidden">
         <div className="relative z-10 flex items-center gap-2">
           <div className="h-9 w-9 rounded bg-primary-foreground text-primary font-bold grid place-items-center">
-            KC
+            YK
           </div>
           <div>
-            <div className="font-semibold">KnitCraft MES</div>
-            <div className="text-[11px] opacity-70 uppercase tracking-wider">Textile Production Suite</div>
+            <div className="font-semibold">YK Apparels</div>
+            <div className="text-[11px] opacity-70 uppercase tracking-wider">Production Suite</div>
           </div>
         </div>
 
         <div className="relative z-10 space-y-6">
           <h2 className="text-3xl font-bold leading-tight max-w-md">
-            Run a 200,000 unit/month sweater factory with confidence.
+            Run YK Apparels production with confidence.
           </h2>
           <p className="text-sm opacity-80 max-w-md leading-relaxed">
             From yarn inward to dispatch. Plan capacity across 7 lines, track 6+ vendor partners,
@@ -88,7 +88,7 @@ export default function Login() {
         </div>
 
         <div className="relative z-10 text-[11px] opacity-60">
-          © 2024 KnitCraft. Built for Indian textile manufacturers.
+          © 2024 YK Apparels. Built for apparel production teams.
         </div>
 
         {/* Decorative grid */}
@@ -109,7 +109,7 @@ export default function Login() {
             <div className="h-9 w-9 rounded bg-primary text-primary-foreground font-bold grid place-items-center">
               <Factory className="h-4 w-4" />
             </div>
-            <div className="font-semibold">KnitCraft MES</div>
+            <div className="font-semibold">YK Apparels</div>
           </div>
 
           <h1 className="text-2xl font-bold">Sign in to your factory</h1>
@@ -164,7 +164,7 @@ export default function Login() {
               </Button>
 
               <div className="text-[11px] text-center text-muted-foreground pt-2">
-                Demo users: rohit@knitcraft.in / demo1234, meena@knitcraft.in / planner123
+                Demo users: rohit@ykapparels.in / demo1234, meena@ykapparels.in / planner123
               </div>
             </form>
           </Form>

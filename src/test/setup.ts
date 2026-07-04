@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 
-process.env.DATABASE_URL ||= "postgresql://postgres:postgres@localhost:5432/knitcraft_mes?schema=public";
+process.env.DATABASE_URL ||= "postgresql://postgres:postgres@localhost:5432/yk_apparels?schema=public";
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,

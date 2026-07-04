@@ -2,7 +2,7 @@
 
 ## Current Backend Shape
 
-The backend is an Express + Prisma API for the KnitCraft MES workflow. It is no longer a planned mock replacement; the core operational modules are implemented against PostgreSQL with route-level tests.
+The backend is an Express + Prisma API for the YK Apparels workflow. It is no longer a planned mock replacement; the core operational modules are implemented against PostgreSQL with route-level tests.
 
 ## Implemented Domains
 

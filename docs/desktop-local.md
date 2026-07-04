@@ -1,4 +1,4 @@
-# KnitCraft Desktop Local Runtime
+# YK Apparels Desktop Local Runtime
 
 ## What lives locally
 - Offline snapshots for Orders, Planning, Inventory, QA, and Dispatch.
@@ -7,7 +7,7 @@
 - Cached desktop session bootstrap for reopening the app offline after a successful online login.
 
 ## Local database
-- Path: `~/Library/Application Support/vite_react_shadcn_ts/offline-knitcraft.db`
+- Path: `~/Library/Application Support/YK Apparels/offline-yk-apparels.db`
 - Main tables:
   - `local_snapshots`
   - `sync_bundles`

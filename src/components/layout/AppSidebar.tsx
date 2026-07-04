@@ -89,13 +89,13 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-border">
       <div className="flex h-14 items-center gap-2 border-b border-border px-4">
         <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground font-bold text-sm">
-          KC
+          YK
         </div>
         {!collapsed && (
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-foreground">KnitCraft MES</span>
+            <span className="text-sm font-semibold text-foreground">YK Apparels</span>
             <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              Textile Production
+              Production Suite
             </span>
           </div>
         )}

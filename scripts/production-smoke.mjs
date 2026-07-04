@@ -96,7 +96,7 @@ export function reconcileOperationalReports({
 
 export async function runProductionSmoke({
   baseUrl = process.env.APP_URL || "http://127.0.0.1:4000",
-  email = process.env.SMOKE_EMAIL || "rohit@knitcraft.in",
+  email = process.env.SMOKE_EMAIL || "rohit@ykapparels.in",
   password = process.env.SMOKE_PASSWORD || "demo1234",
   fetchImpl = globalThis.fetch,
   log = console.log,

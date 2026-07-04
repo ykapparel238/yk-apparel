@@ -1,5 +1,5 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Bell, Search } from "lucide-react";
+import { Bell, ClipboardList, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { DesktopSyncPanel } from "./DesktopSyncPanel";
 import { useDesktopSync } from "@/context/DesktopSyncContext";
-import { fetchGlobalSearch, fetchNotifications } from "@/lib/services";
+import { fetchGlobalSearch, fetchNotifications, fetchOpsToday } from "@/lib/services";
 import { useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -41,6 +41,12 @@ export function AppHeader() {
     queryFn: fetchNotifications,
     refetchInterval: 60_000,
   });
+  const opsQuery = useQuery({
+    queryKey: ["ops-today", "header"],
+    queryFn: fetchOpsToday,
+    refetchInterval: 60_000,
+  });
+  const opsCount = opsQuery.data?.summary?.critical || opsQuery.data?.summary?.warning || opsQuery.data?.summary?.actionable || 0;
   const initials = user
     ? user.name
         .split(" ")
@@ -122,6 +128,19 @@ export function AppHeader() {
         </div>
 
         <DesktopSyncPanel />
+
+        <button
+          className="relative hidden h-9 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted md:flex"
+          onClick={() => navigate(window.matchMedia("(max-width: 767px)").matches ? "/mobile" : "/ops")}
+        >
+          <ClipboardList className="h-4 w-4 text-muted-foreground" />
+          Today
+          {opsCount > 0 ? (
+            <Badge className="h-4 min-w-4 px-1 bg-destructive text-[9px]">
+              {Math.min(opsCount, 99)}
+            </Badge>
+          ) : null}
+        </button>
 
         <Select value={role ?? undefined} onValueChange={(v) => setRole(v as Role)} disabled={!user?.canImpersonate}>
           <SelectTrigger className="h-9 w-[200px] text-xs">

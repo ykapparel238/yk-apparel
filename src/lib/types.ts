@@ -648,6 +648,32 @@ export type NotificationsPayload = {
   items: Array<{ id: string; severity: string; title: string; module: string; time: string; href: string }>;
 };
 
+export type OpsAction = {
+  id: string;
+  label: string;
+  type: string;
+  tone: string;
+  route?: string;
+  defaults?: Record<string, string>;
+};
+
+export type OpsWorkItem = {
+  id: string;
+  module: string;
+  entityType: string;
+  entityId: string;
+  title: string;
+  subtitle: string;
+  severity: string;
+  tone: string;
+  priority: number;
+  dueAt: string | null;
+  status: string;
+  assignedRole: string | null;
+  route: string;
+  action: OpsAction;
+};
+
 export type MobileTodayPayload = {
   date: string;
   role: string;
@@ -658,9 +684,9 @@ export type MobileTodayPayload = {
     subtitle: string;
     count: number;
     tone: string;
-    actions: Array<{ id: string; label: string; type: string; tone: string; defaults?: Record<string, string> }>;
+    actions: OpsAction[];
   }>;
-  actions: Array<{ id: string; label: string; type: string; tone: string; defaults?: Record<string, string> }>;
+  actions: OpsAction[];
   options: {
     orders: Array<{ id: string; poNumber: string }>;
     lines: Array<{ id: string; name: string }>;
@@ -676,15 +702,49 @@ export type MobileTodayPayload = {
     dispatchShipments: Array<{ id: string; orderId: string; label: string; dispatchDate: string; quantity: number; invoiceNumber: string; status: string }>;
     challans: Array<{ id: string; vendorId: string; vendor: string; challanNumber: string; orderPo: string; outQty: number; inQty: number; rejectedQty: number }>;
   };
-  workItems: Array<{
-    id: string;
-    title: string;
-    subtitle: string;
-    tone: string;
-    action: { id: string; label: string; type: string; tone: string; defaults?: Record<string, string> };
-  }>;
+  workItems: OpsWorkItem[];
   recent: Array<{ id: string; type: string; title: string; subtitle: string; route: string }>;
   alerts: Array<{ id: string; title: string; severity: string; module: string; time: string }>;
+  summary?: {
+    critical: number;
+    warning: number;
+    total: number;
+    actionable: number;
+  };
+  syncHealth?: {
+    conflicts: number;
+    devicesNeedingRebuild: number;
+  };
+  exceptions?: Array<{ id: string; severity: string; title: string; module: string; owner: string; href: string; actionLabel: string }>;
+};
+
+export type OpsTodayPayload = MobileTodayPayload;
+
+export type ExceptionsPayload = {
+  generatedAt: string;
+  kpis: {
+    total: number;
+    critical: number;
+    warning: number;
+    info: number;
+  };
+  byOwner: Array<{ owner: string; count: number }>;
+  byModule: Array<{ module: string; count: number }>;
+  items: Array<{
+    id: string;
+    severity: "critical" | "warning" | "info";
+    module: string;
+    title: string;
+    summary: string;
+    ownerRole: string;
+    owner: string;
+    entityType: string;
+    entityId: string;
+    href: string;
+    actionLabel: string;
+    dueDate: string | null;
+    ageDays: number;
+  }>;
 };
 
 export type ReportsPayload = {

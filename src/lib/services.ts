@@ -42,6 +42,8 @@ import type {
   SettingsPayload,
   NotificationsPayload,
   MobileTodayPayload,
+  OpsTodayPayload,
+  ExceptionsPayload,
   SearchPayload,
   StyleColorwayItem,
   StyleMeasurementSpecItem,
@@ -950,4 +952,12 @@ export async function fetchNotifications() {
 
 export async function fetchMobileToday() {
   return api<MobileTodayPayload>("/api/mobile/today");
+}
+
+export async function fetchOpsToday() {
+  return api<OpsTodayPayload>("/api/ops/today");
+}
+
+export async function fetchExceptions() {
+  return api<ExceptionsPayload>("/api/exceptions");
 }

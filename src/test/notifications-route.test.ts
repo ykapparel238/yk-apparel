@@ -4,8 +4,21 @@ const prisma = {
   alert: { findMany: vi.fn() },
   workflowChangeRequest: { findMany: vi.fn() },
   purchaseOrder: { findMany: vi.fn() },
+  productionPlan: { findMany: vi.fn() },
+  productionEntry: { findMany: vi.fn() },
+  productionLine: { findMany: vi.fn() },
+  shift: { findMany: vi.fn() },
+  downtimeReason: { findMany: vi.fn() },
   material: { findMany: vi.fn() },
+  procurementRequest: { findMany: vi.fn() },
+  supplierPurchaseOrder: { findMany: vi.fn() },
   qaInspection: { findMany: vi.fn() },
+  qaDefectType: { findMany: vi.fn() },
+  correctiveAction: { findMany: vi.fn() },
+  vendor: { findMany: vi.fn() },
+  vendorChallan: { findMany: vi.fn() },
+  syncConflict: { findMany: vi.fn() },
+  desktopDevice: { findMany: vi.fn() },
 };
 
 vi.mock("../../server/db.mjs", () => ({ prisma }));
@@ -49,8 +62,21 @@ describe("notifications route", () => {
     prisma.alert.findMany.mockResolvedValue([]);
     prisma.workflowChangeRequest.findMany.mockResolvedValue([]);
     prisma.purchaseOrder.findMany.mockResolvedValue([]);
+    prisma.productionPlan.findMany.mockResolvedValue([]);
+    prisma.productionEntry.findMany.mockResolvedValue([]);
+    prisma.productionLine.findMany.mockResolvedValue([]);
+    prisma.shift.findMany.mockResolvedValue([]);
+    prisma.downtimeReason.findMany.mockResolvedValue([]);
     prisma.material.findMany.mockResolvedValue([]);
+    prisma.procurementRequest.findMany.mockResolvedValue([]);
+    prisma.supplierPurchaseOrder.findMany.mockResolvedValue([]);
     prisma.qaInspection.findMany.mockResolvedValue([]);
+    prisma.qaDefectType.findMany.mockResolvedValue([]);
+    prisma.correctiveAction.findMany.mockResolvedValue([]);
+    prisma.vendor.findMany.mockResolvedValue([]);
+    prisma.vendorChallan.findMany.mockResolvedValue([]);
+    prisma.syncConflict.findMany.mockResolvedValue([]);
+    prisma.desktopDevice.findMany.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -64,6 +90,7 @@ describe("notifications route", () => {
         id: "cr-1",
         module: "orders",
         entityType: "PurchaseOrder",
+        operation: "update",
         createdAt: new Date("2026-05-01T10:00:00.000Z"),
         requester: { name: "Meena" },
       },
@@ -73,7 +100,7 @@ describe("notifications route", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.count).toBe(1);
-    expect(res.body.items[0]).toMatchObject({ module: "Settings", href: "/settings" });
+    expect(res.body.items[0]).toMatchObject({ module: "settings", href: "/settings" });
   });
 
   it("hides admin change requests from non-admin notifications", async () => {
@@ -90,12 +117,14 @@ describe("notifications route", () => {
   it("includes low-stock material notifications", async () => {
     const route = (await import("../../server/routes/notifications.mjs")).default;
     prisma.material.findMany.mockResolvedValue([
-      { id: "mat-1", sku: "Y001", stockQty: "10.00", reorderLevel: "25.00", updatedAt: new Date("2026-05-01T10:00:00.000Z") },
+      { id: "mat-1", sku: "Y001", name: "Cotton Yarn", uom: "KG", stockQty: "10.00", reorderLevel: "25.00", supplier: null, updatedAt: new Date("2026-05-01T10:00:00.000Z") },
     ]);
 
-    const { res } = await invokeRoute(route, "get", "/");
+    const { res } = await invokeRoute(route, "get", "/", {
+      sessionUser: { id: "u2", role: "STORE_MANAGER", actualRole: "STORE_MANAGER" },
+    });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.items.some((item) => item.module === "Inventory")).toBe(true);
+    expect(res.body.items.some((item) => item.module === "inventory")).toBe(true);
   });
 });

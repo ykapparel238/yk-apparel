@@ -11,6 +11,7 @@ import {
   Bell,
   Calendar,
   Filter,
+  ShieldAlert,
 } from "lucide-react";
 import {
   Bar,
@@ -47,6 +48,7 @@ import { useRole } from "@/context/RoleContext";
 import { useQuery } from "@tanstack/react-query";
 import { fetchDashboard, fetchMastersOptions, type DashboardFilters } from "@/lib/services";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 const chartTooltipStyle = {
   contentStyle: {
@@ -116,6 +118,12 @@ export default function Dashboard() {
           }}>
             <Filter className="h-3.5 w-3.5 mr-1.5" />
             Filters
+          </Button>
+          <Button asChild variant="outline" size="sm" className="h-9">
+            <Link to="/exceptions">
+              <ShieldAlert className="h-3.5 w-3.5 mr-1.5" />
+              Exceptions
+            </Link>
           </Button>
           <Button size="sm" className="h-9 bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => {
             window.location.href = `/api/dashboard.pdf${query}`;

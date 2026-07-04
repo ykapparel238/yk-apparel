@@ -23,8 +23,10 @@ const QA = lazy(() => import("./pages/QA"));
 const Dispatch = lazy(() => import("./pages/Dispatch"));
 const Masters = lazy(() => import("./pages/Masters"));
 const Reports = lazy(() => import("./pages/Reports"));
+const Exceptions = lazy(() => import("./pages/Exceptions"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Mobile = lazy(() => import("./pages/Mobile"));
+const OpsHub = lazy(() => import("./pages/OpsHub"));
 const Login = lazy(() => import("./pages/Login"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -79,6 +81,7 @@ const App = () => (
               <Routes>
                 <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
                 <Route path="/" element={<ProtectedRoute><Shell><Dashboard /></Shell></ProtectedRoute>} />
+                <Route path="/ops" element={<ProtectedRoute><Shell><OpsHub /></Shell></ProtectedRoute>} />
                 <Route path="/orders" element={<ProtectedRoute><Shell><Orders /></Shell></ProtectedRoute>} />
                 <Route path="/orders/:id" element={<ProtectedRoute><Shell><OrderDetail /></Shell></ProtectedRoute>} />
                 <Route path="/planning" element={<ProtectedRoute><Shell><Planning /></Shell></ProtectedRoute>} />
@@ -91,6 +94,7 @@ const App = () => (
                 <Route path="/dispatch" element={<ProtectedRoute><Shell><Dispatch /></Shell></ProtectedRoute>} />
                 <Route path="/masters" element={<ProtectedRoute><Shell><Masters /></Shell></ProtectedRoute>} />
                 <Route path="/reports" element={<ProtectedRoute><Shell><Reports /></Shell></ProtectedRoute>} />
+                <Route path="/exceptions" element={<ProtectedRoute><Shell><Exceptions /></Shell></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Shell><Settings /></Shell></ProtectedRoute>} />
                 <Route path="/mobile" element={<ProtectedRoute><Mobile /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />

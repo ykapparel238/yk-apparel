@@ -234,6 +234,25 @@ export default function Mobile() {
           </section>
         ) : null}
 
+        {payload.exceptions?.length ? (
+          <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <h2 className="text-sm font-semibold">Exceptions</h2>
+            <div className="mt-3 space-y-2">
+              {payload.exceptions.map((item) => (
+                <button key={item.id} className="w-full rounded-xl border border-border bg-muted/20 p-3 text-left" onClick={() => navigate(item.href)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold">{item.title}</div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">{item.module} · {item.owner}</div>
+                    </div>
+                    <span className={`rounded px-2 py-1 text-[10px] font-semibold ${toneClass(item.severity)}`}>{item.actionLabel}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {payload.actions.length ? (
           <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <h2 className="text-sm font-semibold">Quick actions</h2>

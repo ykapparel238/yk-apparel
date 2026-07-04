@@ -8,11 +8,15 @@ import {
   Package,
   Users2,
   BarChart3,
+  ShieldAlert,
   Settings,
   Boxes,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
+import { fetchOpsToday } from "@/lib/services";
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +31,7 @@ import {
 
 const main = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Today Ops", url: "/ops", icon: ClipboardList },
   { title: "Orders", url: "/orders", icon: ShoppingCart },
   { title: "Production Planning", url: "/planning", icon: CalendarRange },
   { title: "Production Floor", url: "/production", icon: Factory },
@@ -41,6 +46,7 @@ const ops = [
 ];
 
 const insights = [
+  { title: "Exceptions", url: "/exceptions", icon: ShieldAlert },
   { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
@@ -49,6 +55,8 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
+  const opsQuery = useQuery({ queryKey: ["ops-today", "sidebar"], queryFn: fetchOpsToday, refetchInterval: 60_000 });
+  const todayCount = opsQuery.data?.summary?.critical || opsQuery.data?.summary?.warning || opsQuery.data?.summary?.actionable || 0;
 
   const renderItem = (item: { title: string; url: string; icon: LucideIcon }) => {
     const active = item.url === "/" ? pathname === "/" : pathname.startsWith(item.url);
@@ -66,6 +74,11 @@ export function AppSidebar() {
           >
             <item.icon className="h-4 w-4 shrink-0" />
             {!collapsed && <span className="truncate">{item.title}</span>}
+            {!collapsed && item.url === "/ops" && todayCount > 0 ? (
+              <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold text-destructive-foreground">
+                {Math.min(todayCount, 99)}
+              </span>
+            ) : null}
           </NavLink>
         </SidebarMenuButton>
       </SidebarMenuItem>

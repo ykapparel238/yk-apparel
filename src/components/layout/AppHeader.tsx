@@ -1,5 +1,5 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Bell, ClipboardList, Search } from "lucide-react";
+import { Bell, ClipboardList, LogOut, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,7 +26,7 @@ import { useDeferredValue, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export function AppHeader() {
-  const { role, setRole, user } = useRole();
+  const { role, setRole, user, logout } = useRole();
   const { status } = useDesktopSync();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -204,17 +204,39 @@ export function AppHeader() {
           </PopoverContent>
         </Popover>
 
-        <div className="flex items-center gap-2 pl-2 border-l border-border">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-primary-soft text-primary text-xs font-semibold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="hidden md:block leading-tight">
-            <div className="text-xs font-semibold">{user?.name ?? "Guest"}</div>
-            <div className="text-[10px] text-muted-foreground">{role ?? "No role"}</div>
-          </div>
-        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="flex items-center gap-2 rounded-md border-l border-border py-1 pl-2 pr-1 text-left hover:bg-muted">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-primary-soft text-primary text-xs font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="hidden md:block leading-tight">
+                <div className="text-xs font-semibold">{user?.name ?? "Guest"}</div>
+                <div className="text-[10px] text-muted-foreground">{role ?? "No role"}</div>
+              </div>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 p-2">
+            <div className="rounded-md px-2 py-2">
+              <div className="text-sm font-semibold">{user?.name ?? "Guest"}</div>
+              <div className="mt-0.5 truncate text-xs text-muted-foreground">{user?.email ?? "No active session"}</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">{role ?? "No role"}</div>
+            </div>
+            <button
+              type="button"
+              className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+              onClick={() => {
+                logout();
+                navigate("/login", { replace: true });
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </PopoverContent>
+        </Popover>
       </div>
     </header>
   );

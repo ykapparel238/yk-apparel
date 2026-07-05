@@ -1,5 +1,5 @@
 const CACHE_NAME = "yk-apparels-mobile-shell-v1";
-const APP_SHELL = ["/", "/mobile", "/manifest.webmanifest", "/pwa-icon.svg"];
+const APP_SHELL = ["/", "/mobile", "/manifest.webmanifest", "/pwa-icon.svg", "/pwa-icon.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

@@ -28,6 +28,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { BrandMark } from "@/components/BrandMark";
 
 const main = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -88,9 +89,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-border">
       <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded bg-primary text-primary-foreground font-bold text-sm">
-          YK
-        </div>
+        <BrandMark className="h-8 w-8 rounded-lg" compact={collapsed} />
         {!collapsed && (
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-semibold text-foreground">YK Apparels</span>

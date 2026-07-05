@@ -18,6 +18,7 @@ import { roles, type Role } from "@/lib/auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { DesktopSyncPanel } from "./DesktopSyncPanel";
+import { BrandMark } from "@/components/BrandMark";
 import { useDesktopSync } from "@/context/DesktopSyncContext";
 import { fetchGlobalSearch, fetchNotifications, fetchOpsToday } from "@/lib/services";
 import { useQuery } from "@tanstack/react-query";
@@ -59,6 +60,14 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card/80 backdrop-blur px-4">
       <SidebarTrigger className="text-muted-foreground" />
+      <button
+        type="button"
+        className="flex items-center gap-2 rounded-md pr-2 text-left transition-opacity hover:opacity-85"
+        onClick={() => navigate("/")}
+      >
+        <BrandMark className="h-8 w-8 rounded-lg" compact />
+        <span className="hidden text-sm font-semibold text-foreground sm:inline">YK Apparels</span>
+      </button>
       <Popover open={searchOpen} onOpenChange={setSearchOpen}>
         <PopoverTrigger asChild>
           <div className="hidden md:flex items-center relative w-80">

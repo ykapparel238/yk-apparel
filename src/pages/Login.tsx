@@ -12,7 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { useRole } from "@/context/RoleContext";
 import { loginSchema, type LoginInput } from "@/lib/auth";
-import { Factory, TriangleAlert } from "lucide-react";
+import { BrandMark } from "@/components/BrandMark";
+import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -56,9 +57,7 @@ export default function Login() {
       {/* Brand panel */}
       <div className="hidden lg:flex flex-col justify-between p-12 bg-primary text-primary-foreground relative overflow-hidden">
         <div className="relative z-10 flex items-center gap-2">
-          <div className="h-9 w-9 rounded bg-primary-foreground text-primary font-bold grid place-items-center">
-            YK
-          </div>
+          <BrandMark className="h-10 w-10 rounded-xl" />
           <div>
             <div className="font-semibold">YK Apparels</div>
             <div className="text-[11px] opacity-70 uppercase tracking-wider">Production Suite</div>
@@ -106,9 +105,7 @@ export default function Login() {
       <div className="flex items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="h-9 w-9 rounded bg-primary text-primary-foreground font-bold grid place-items-center">
-              <Factory className="h-4 w-4" />
-            </div>
+            <BrandMark className="h-9 w-9 rounded-xl" />
             <div className="font-semibold">YK Apparels</div>
           </div>
 

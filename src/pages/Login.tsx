@@ -31,8 +31,8 @@ export default function Login() {
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "rohit@ykapparels.in",
-      password: "demo1234",
+      email: "",
+      password: "",
     },
   });
 
@@ -123,7 +123,7 @@ export default function Login() {
                   <FormItem className="space-y-1.5">
                     <FormLabel className="text-xs">Email</FormLabel>
                     <FormControl>
-                      <Input type="email" className="h-10" {...field} />
+                      <Input type="email" className="h-10" placeholder="Enter email" {...field} />
                     </FormControl>
                     <FormMessage className="text-[11px]" />
                   </FormItem>
@@ -142,7 +142,7 @@ export default function Login() {
                       </a>
                     </div>
                     <FormControl>
-                      <Input type="password" className="h-10" {...field} />
+                      <Input type="password" className="h-10" placeholder="Enter password" {...field} />
                     </FormControl>
                     <FormMessage className="text-[11px]" />
                   </FormItem>

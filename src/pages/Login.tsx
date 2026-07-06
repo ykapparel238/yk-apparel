@@ -160,9 +160,6 @@ export default function Login() {
                 {isSubmitting ? "Signing in..." : "Sign in"}
               </Button>
 
-              <div className="text-[11px] text-center text-muted-foreground pt-2">
-                Demo users: rohit@ykapparels.in / demo1234, meena@ykapparels.in / planner123
-              </div>
             </form>
           </Form>
 
